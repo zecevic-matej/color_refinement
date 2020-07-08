@@ -296,7 +296,7 @@ def assume_bipartite(A):
     return ids, labels
 
 
-def show_partitions_colored(A, P, Q):
+def show_partitions_colored(A, P, Q, ids):
 
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
 
@@ -331,31 +331,87 @@ def permute_A_according_to_partitions(A, P, Q):
     Ap = Ap[:,flatten(Q)]
     return Ap
 
+
+def show_graph_and_partitions(A):
+    """
+    Uses all above functions to compute the partitions,
+    and visualize them.
+
+    :param A: connectivity matrix of some Graph G
+    :return:
+    """
+
+    ids, labels = assume_bipartite(A)
+
+    G_raw = create_dataframe_from_A_and_ids_and_labels(A, ids, labels)
+    G = draw_graph(G_raw)
+
+    P, Q = compute_partitions(A, ids)
+
+    show_partitions_colored(A, P, Q, ids)
+
+    return {"ids": ids, "labels": labels, "G": G, "A": A, "partitions": (P, Q)}
+
+def check_if_pair_is_fractional_automorphism(A, P, Q):
+
+    #TODO: implement the check that XA = AY for X and Y being constructed, Corollary 6.1
+    ...
+
 """
 Function Section ^
 Script Section   v
 """
 
-# A = np.array([
-#     [1, 1, 0, 0],
-#     [0, 0, 1, 0],
-#     [1, 0, 0, 1]
-# ])
-# ids = (['A', 'B', 'C'],['1', '2', '3', '4'])
-# labels = (['orangered','orangered','orangered'], ['lightskyblue','lightskyblue','lightskyblue','lightskyblue'])
-
+# example matrix
 A = np.array([
     [1, 0, 1, 0],
     [1, 1, 0, 0],
     [1, 0, 1, 0],
     [0, 0, 1, 1],
 ])
+d = show_graph_and_partitions(A)
 
-ids, labels = assume_bipartite(A)
+# Examples 5.1
+# A3 = np.array([
+#     [1, 1, 0],
+#     [1, 0, 1],
+#     [0, 1, 1],
+#
+# ])
+# A4 = np.array([
+#     [1, 1, 0, 0],
+#     [1, 0, 1, 0],
+#     [0, 1, 0, 1],
+#     [0, 0, 1, 1]
+# ])
+# A5 = np.array([
+#     [1, 1, 0, 0, 0],
+#     [1, 1, 0, 0, 0],
+#     [0, 0, 1, 1, 0],
+#     [0, 0, 1, 0, 1],
+#     [0, 0, 0, 1, 1],
+# ])
+# for A in [A3, A4, A5]:
+#     d = show_graph_and_partitions(A)
 
-G_raw = create_dataframe_from_A_and_ids_and_labels(A, ids, labels)
-G = draw_graph(G_raw)
+# Direct Sum of Example 5.9
+# A = np.array([
+#     [1,0,0,0,   0,0,0,0],
+#     [0,1,0,0,   0,0,0,0],
+#     [0,0,1,1,   0,0,0,0],
+#     [0,0,1,1,   0,0,0,0],
+#     [0,0,0,0,   1,0,0,0],
+#     [0,0,0,0,   0,1,1,0],
+#     [0,0,0,0,   0,1,0,1],
+#     [0,0,0,0,   0,0,1,1],
+# ])
+# d = show_graph_and_partitions(A)
 
-P, Q = compute_partitions(A, ids)
-
-show_partitions_colored(A, P, Q)
+# create multiple random binary graphs
+# np.random.seed(0)
+# N = 1
+# for i in range(N):
+#
+#     A = np.random.randint(2, size=(np.random.randint(3,7), np.random.randint(3,7)))
+#
+#     d = show_graph_and_partitions(A)
