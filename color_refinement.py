@@ -160,7 +160,7 @@ def compute_partitions(A, ids=None):
                 for c_q in Q:
                     sum1 = sum([A[int(p[0]), int(x)] for x in c_q])
                     sum2 = sum([A[int(p[1]), int(x)] for x in c_q])
-                    if sum1 != sum2:
+                    if not np.allclose(sum1, sum2):
                         #import pdb; pdb.set_trace()
                         for l in new_classes_P:
                             if p[0] in l:
@@ -206,7 +206,7 @@ def compute_partitions(A, ids=None):
                 for c_p in P:
                     sum1 = sum([A[int(x), int(p[0])] for x in c_p])
                     sum2 = sum([A[int(x), int(p[1])] for x in c_p])
-                    if sum1 != sum2:
+                    if not np.allclose(sum1, sum2):
                         #import pdb; pdb.set_trace()
                         for l in new_classes_Q:
                             if p[0] in l:
@@ -406,6 +406,20 @@ d = show_graph_and_partitions(A)
 #     [0,0,0,0,   0,0,1,1],
 # ])
 # d = show_graph_and_partitions(A)
+
+A = np.array([
+    [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
+    [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
+    [1, 3, -1, 0.25, 0.25, 0.25, 0.25, 0, 0, 0.5, 0.5, 0.5, 0.5, 1],
+
+    [0, 1 / 3, 2 / 3, 0, 3 / 2, 0, 3 / 2, 2, 0, 1, 0, -1, 0, 1],
+    [1/3, 1/3, 1/3, 3/2, 0, 3/2, 0, 2, 0, 0, 1, 0, -1, 1],
+    [1/3, 1/3, 1/3, 0, 3/2, 0, 3/2, 0, 2, -1, 0, 1, 0, 1],
+    [2/3, 1/3, 0, 3/2, 0, 3/2, 0, 0, 2, 0, -1, 0, 1, 1],
+
+    [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, np.inf],
+])
+d = show_graph_and_partitions(A)
 
 # create multiple random binary graphs
 # np.random.seed(0)
