@@ -1,6 +1,7 @@
 # libraries
 import pandas as pd
 import numpy as np
+np.set_printoptions(suppress=True, linewidth=200)
 import networkx as nx
 import matplotlib.pyplot as plt
 import itertools
@@ -126,7 +127,7 @@ def partition_with_ids(P, Q, ids):
     return P_ids, Q_ids
 
 
-def compute_partitions(A, ids=None):
+def compute_partitions(A, ids=None, verbose=False):
     """
     Color refinement.
 
@@ -152,11 +153,13 @@ def compute_partitions(A, ids=None):
         # find all pairs belonging to same class, and join after rule
         new_classes_P = []
         for c_p in P:
-            print("P iter - Class " + str(c_p) + " of " + str(P))
+            if verbose:
+                print("P iter - Class " + str(c_p) + " of " + str(P))
             if count > 0 and len(c_p) == 1:
                 new_classes_P.append(c_p)
             for p in itertools.combinations(c_p, 2):
-                print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_p, 2)]))
+                if verbose:
+                    print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_p, 2)]))
                 for c_q in Q:
                     sum1 = sum([A[int(p[0]), int(x)] for x in c_q])
                     sum2 = sum([A[int(p[1]), int(x)] for x in c_q])
@@ -191,18 +194,21 @@ def compute_partitions(A, ids=None):
                             if p[1] in l:
                                 new_classes_P[ind_l].append(p[1])
                 not_together = False
-                print("State is " + str(new_classes_P))
+                if verbose:
+                    print("State is " + str(new_classes_P))
         new_classes_P = [list(set(s)) for s in new_classes_P]
         new_classes_P = remove_sublists(new_classes_P)
 
         # find all pairs belonging to same class, and join after rule
         new_classes_Q = []
         for c_q in Q:
-            print("Q iter - Class " + str(c_q) + " of " + str(Q))
+            if verbose:
+                print("Q iter - Class " + str(c_q) + " of " + str(Q))
             if count > 0 and len(c_q) == 1:
                 new_classes_Q.append(c_q)
             for p in itertools.combinations(c_q, 2):
-                print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_q, 2)]))
+                if verbose:
+                    print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_q, 2)]))
                 for c_p in P:
                     sum1 = sum([A[int(x), int(p[0])] for x in c_p])
                     sum2 = sum([A[int(x), int(p[1])] for x in c_p])
@@ -237,7 +243,8 @@ def compute_partitions(A, ids=None):
                             if p[1] in l:
                                 new_classes_Q[ind_l].append(p[1])
                 not_together = False
-                print("State is " + str(new_classes_Q))
+                if verbose:
+                    print("State is " + str(new_classes_Q))
             #if count == 2:
             #    import pdb; pdb.set_trace()
         new_classes_Q = [list(set(s)) for s in new_classes_Q]
@@ -332,7 +339,7 @@ def permute_A_according_to_partitions(A, P, Q):
     return Ap
 
 
-def show_graph_and_partitions(A):
+def show_graph_and_partitions(A, P=None, Q=None):
     """
     Uses all above functions to compute the partitions,
     and visualize them.
@@ -346,16 +353,151 @@ def show_graph_and_partitions(A):
     G_raw = create_dataframe_from_A_and_ids_and_labels(A, ids, labels)
     G = draw_graph(G_raw)
 
-    P, Q = compute_partitions(A, ids)
+    if not (P and Q):
+        P, Q = compute_partitions(A, ids)
 
     show_partitions_colored(A, P, Q, ids)
 
     return {"ids": ids, "labels": labels, "G": G, "A": A, "partitions": (P, Q)}
 
-def check_if_pair_is_fractional_automorphism(A, P, Q):
 
-    #TODO: implement the check that XA = AY for X and Y being constructed, Corollary 6.1
-    ...
+def check_if_pair_is_fractional_automorphism(A, P, Q):
+    """
+    Check if P,Q are partitions that can act as a fractional automorphism on A.
+    Corollary 6.1 XA = AY where X = CC and Y = DD
+
+    :param A:
+    :param P:
+    :param Q:
+    :return:
+    """
+
+    Pip, Piq = calculate_partition_matrices(P, Q)
+
+    PipS = calculate_S_partition_matrix(Pip)
+    PiqS = calculate_S_partition_matrix(Piq)
+
+    CC = Pip @ PipS
+    DD = Piq @ PiqS
+
+    return np.allclose(CC @ A, A @ DD)
+
+
+def calculate_partition_matrices(P, Q):
+    """
+    The partitions yield binary partitions matrices which yield which elements
+    are in which partition for each of the available partitions.
+
+    :param P:
+    :param Q:
+    :return:
+    """
+
+    Vp = sorted(flatten(P))
+    Vq = sorted(flatten(Q))
+
+    Pip = np.zeros((len(Vp), len(P)))
+    Piq = np.zeros((len(Vq), len(Q)))
+
+    for ind_p, p in enumerate(P):
+        for v in Vp:
+            if v in p:
+                Pip[v, ind_p] = 1
+    for ind_q, q in enumerate(Q):
+        for v in Vq:
+            if v in q:
+                Piq[v, ind_q] = 1
+
+    return Pip, Piq
+
+
+def calculate_S_partition_matrix(Pi):
+    """
+    The scaled transpose is a transpose with the frequencies of
+    each partition subset i.e., if there are 3 elements in a partition,
+    then every 1 entry is converted to 1/3.
+    It is used because it is a stochastic matrix.
+
+    :param Pi:
+    :return:
+    """
+
+    PiS = np.zeros((Pi.shape[1], Pi.shape[0]))
+
+    for ind_y, r in enumerate(Pi):
+        for ind_x, c in enumerate(r):
+            PiS[ind_x, ind_y] = c / sum(Pi[:,ind_x])
+
+    return PiS
+
+
+def calculate_core_factor(A, P, Q):
+    """
+    The core factor is calculated according to what follows Corollary 6.1
+
+    :param A:
+    :param P:
+    :param Q:
+    :return:
+    """
+
+    if np.isinf(A).any() or np.isnan(A).any():
+
+        raise Exception("Check A for Infinity or NaN.")
+
+    Pip, Piq = calculate_partition_matrices(P, Q)
+
+    PipS = calculate_S_partition_matrix(Pip)
+
+    A_core = PipS @ A @ Piq # equivalent to np.dot(.,.)
+
+    return A_core
+
+
+def calculate_iterated_core_factor(A, show_visualizations=False):
+    """
+    Calculate the iterated core factor of the graph matrix A.
+    Visualizations of the intermediate Graphs and permutated versions can be made.
+
+    :param A: graph (weighted) connection matrix of form V x W
+    :param show_visualizations: bool:
+    :return: A_core: iterated core factor, a matrix smaller than the original A
+    """
+
+    print('\n++++++++++++++++++++ Initial Matrix of the Graph ++++++++++++++++++++\n\n\t A = {}\n\n'
+          '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'
+          .format('\t' + str(A).replace('\n','\n\t\t')))
+
+    iter = 1
+    fin = False
+    while True:
+
+        ids, labels = assume_bipartite(A)
+
+        P, Q = compute_partitions(A, ids)
+
+        A_core = calculate_core_factor(A, P, Q)
+
+        if A.shape == A_core.shape and np.allclose(A_core, A):
+            fin = True
+
+        old_A = A.copy()
+        A = A_core
+
+        if show_visualizations:
+
+            show_graph_and_partitions(old_A, P, Q)
+
+        if fin:
+            break
+        
+        print('\n++++++++++++++++++++ Computed Core Factor {} ++++++++++++++++++++\n\n\t A = {}\n\n'
+              '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'.format(iter, '\t' + str(A_core).replace('\n', '\n\t\t')))
+
+        iter += 1
+
+    return A_core
+
 
 """
 Function Section ^
@@ -407,6 +549,7 @@ d = show_graph_and_partitions(A)
 # ])
 # d = show_graph_and_partitions(A)
 
+# big A from Example 1.1
 A = np.array([
     [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
     [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
