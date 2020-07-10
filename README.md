@@ -3,7 +3,7 @@
 Based on [Grohe et al. "Dimension Reduction via Color Refinement"](https://arxiv.org/pdf/1307.5697.pdf). 
 
 A graph can be viewed as a matrix and vice versa:
-![graph_and_matrix_representations.pdf](imgs/graph_and_matrix_representations.pdf)
+![graph_and_matrix_representations.png](imgs/graph_and_matrix_representations.png)
 
 Given for instance following matrix, and running the subsequent function,
 
@@ -28,7 +28,7 @@ Color Refinement finds the coarsest stable coloring. The plots show a kind of sy
 
 The equitable partitions also allow for calculating the iterated core factor of a possibly big matrix:
 
-![iterated_core_factor.pdf](imgs/iterated_core_factor.pdf)
+![iterated_core_factor.png](imgs/iterated_core_factor.png)
 
 Simply run
 
