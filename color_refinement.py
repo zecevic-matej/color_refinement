@@ -6,7 +6,12 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import itertools
 import matplotlib.pyplot as plt
-
+# TODO: remove this if no proper way for the TODO's below is found
+# import matplotlib as mpl
+# mpl.rcParams['font.size'] = 20
+# mpl.rcParams['text.usetex'] = True
+# mpl.rcParams['text.latex.unicode'] = True
+# mpl.rcParams['text.latex.preamble'] = r'\usepackage{{amsmath,amssymb,amsfonts,amsthm}}\n\setcounter{MaxMatrixCols}{20}'
 
 def create_dataframe_from_A_and_ids_and_labels(A, ids, labels):
     """
@@ -499,19 +504,73 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
     return A_core
 
 
+# TODO: make the below function more flexible
+def matrix(a, l='p'):
+    """Returns a LaTeX pmatrix
+
+    :a: numpy array
+    :returns: LaTeX pmatrix as a string
+    """
+    if len(a.shape) > 2:
+        raise ValueError('matrix can at most display two dimensions')
+    lines = str(a).replace('[', '').replace(']', '').splitlines()
+    rv = [r'\begin{pmatrix}']
+    rv += ['  ' + ' & '.join(l.split()) + r'\\' for l in lines]
+    rv +=  [r'\end{pmatrix}']
+    rv = ''.join(rv)
+    rv = rv.replace('inf', '\\infty ')
+    return '$' + rv + '$'
+
+# TODO: find a way of doing this, because with this method there
+#       is the bug with the matrix shape size restriction,
+#       and other methods simply do not work
+def create_matrix_comparison(A, B):
+
+    # fig, ax = plt.subplots()
+    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
+
+    #ax2.text(0.5, 0.5, matrix(np.matrix.round(np.random.rand(10,16), 2)))
+    ax1.annotate(
+        matrix(np.matrix.round(A, 2)),
+        (0.25, 0.25),
+        textcoords='axes fraction', size=20)
+
+    plt.show()
+
 """
 Function Section ^
 Script Section   v
 """
 
-# example matrix
+# big A from Example 1.1
 A = np.array([
-    [1, 0, 1, 0],
-    [1, 1, 0, 0],
-    [1, 0, 1, 0],
-    [0, 0, 1, 1],
+    [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
+    [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
+    [1, 3, -1, 0.25, 0.25, 0.25, 0.25, 0, 0, 0.5, 0.5, 0.5, 0.5, 1],
+
+    [0, 1 / 3, 2 / 3, 0, 3 / 2, 0, 3 / 2, 2, 0, 1, 0, -1, 0, 1],
+    [1/3, 1/3, 1/3, 3/2, 0, 3/2, 0, 2, 0, 0, 1, 0, -1, 1],
+    [1/3, 1/3, 1/3, 0, 3/2, 0, 3/2, 0, 2, -1, 0, 1, 0, 1],
+    [2/3, 1/3, 0, 3/2, 0, 3/2, 0, 0, 2, 0, -1, 0, 1, 1],
+
+    [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, np.inf],
 ])
-d = show_graph_and_partitions(A)
+A[-1,-1] = 0
+#d = show_graph_and_partitions(A)
+A_itr_core = calculate_iterated_core_factor(A)
+
+"""
+More Examples Below v
+"""
+
+# example matrix
+# A = np.array([
+#     [1, 0, 1, 0],
+#     [1, 1, 0, 0],
+#     [1, 0, 1, 0],
+#     [0, 0, 1, 1],
+# ])
+# d = show_graph_and_partitions(A)
 
 # Examples 5.1
 # A3 = np.array([
@@ -548,21 +607,6 @@ d = show_graph_and_partitions(A)
 #     [0,0,0,0,   0,0,1,1],
 # ])
 # d = show_graph_and_partitions(A)
-
-# big A from Example 1.1
-A = np.array([
-    [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
-    [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
-    [1, 3, -1, 0.25, 0.25, 0.25, 0.25, 0, 0, 0.5, 0.5, 0.5, 0.5, 1],
-
-    [0, 1 / 3, 2 / 3, 0, 3 / 2, 0, 3 / 2, 2, 0, 1, 0, -1, 0, 1],
-    [1/3, 1/3, 1/3, 3/2, 0, 3/2, 0, 2, 0, 0, 1, 0, -1, 1],
-    [1/3, 1/3, 1/3, 0, 3/2, 0, 3/2, 0, 2, -1, 0, 1, 0, 1],
-    [2/3, 1/3, 0, 3/2, 0, 3/2, 0, 0, 2, 0, -1, 0, 1, 1],
-
-    [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, np.inf],
-])
-d = show_graph_and_partitions(A)
 
 # create multiple random binary graphs
 # np.random.seed(0)

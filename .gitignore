@@ -1,1 +1,11 @@
 .DS*
+*.tex
+*.aux
+*.log
+*.out
+*.pdf
+*.snm
+*.synctex.gz
+*.nav
+*.toc
+!imgs/*
