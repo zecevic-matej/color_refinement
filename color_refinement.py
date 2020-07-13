@@ -670,6 +670,21 @@ x = solve_LP_via_color_refinement(A_LP=A)
 More Examples Below v
 """
 
+# speed comparison of solving high-dimensional or reducing first
+# for the LP from Example 1.1, solving directly is still clearly faster
+# however scaling to 'really high dimensional' matrices should turn the sides
+#
+# import time
+# t0 = time.time()
+# x = solve_LP_via_color_refinement(A_LP=A)
+# t1 = (time.time() - t0)
+# opt = optimize_LP(A)
+# check_if_x_solves_LP(A, opt.x)
+# t2 = (time.time() - t0) - t1
+# print('\nSpeed Comparison --------------------------------------------------------------------\n'
+#       'Solving the Original LP directly took: {} seconds\n'
+#       'Performing CR, Solving the Reduced LP, and Mapping Back took: {} seconds'.format(t2, t1))
+
 # example matrix
 # A = np.array([
 #     [1, 0, 1, 0],
