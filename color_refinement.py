@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 # mpl.rcParams['text.usetex'] = True
 # mpl.rcParams['text.latex.unicode'] = True
 # mpl.rcParams['text.latex.preamble'] = r'\usepackage{{amsmath,amssymb,amsfonts,amsthm}}\n\setcounter{MaxMatrixCols}{20}'
+from scipy.optimize import linprog
 
 def create_dataframe_from_A_and_ids_and_labels(A, ids, labels):
     """
@@ -466,7 +467,8 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
 
     :param A: graph (weighted) connection matrix of form V x W
     :param show_visualizations: bool:
-    :return: A_core: iterated core factor, a matrix smaller than the original A
+    :return: A_core: iterated core factor, a matrix smaller than the original A,
+             core_factors: list of all core factors including iterated one
     """
 
     print('\n++++++++++++++++++++ Initial Matrix of the Graph ++++++++++++++++++++\n\n\t A = {}\n\n'
@@ -475,6 +477,7 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
 
     iter = 1
     fin = False
+    core_factors = []
     while True:
 
         ids, labels = assume_bipartite(A)
@@ -501,7 +504,9 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
 
         iter += 1
 
-    return A_core
+        core_factors.append(A_core)
+
+    return A_core, core_factors
 
 
 # TODO: make the below function more flexible
@@ -521,6 +526,7 @@ def matrix(a, l='p'):
     rv = rv.replace('inf', '\\infty ')
     return '$' + rv + '$'
 
+
 # TODO: find a way of doing this, because with this method there
 #       is the bug with the matrix shape size restriction,
 #       and other methods simply do not work
@@ -536,6 +542,104 @@ def create_matrix_comparison(A, B):
         textcoords='axes fraction', size=20)
 
     plt.show()
+
+
+def optimize_LP(A_LP):
+    """
+    Solve a given LP in matrix form.
+
+    :param A_LP: matrix containing LP as in Example 1.1
+    :return: optimization results
+    """
+
+    obj = A_LP[-1,:-1] # last row of matrix, up until last column
+
+    lhs_eq = []
+    rhs_eq = []
+    for ind_row, y in enumerate(A_LP[:-1,:]): # all except last row
+
+        lhs_eq.append(A_LP[ind_row,:-1]) # row up until last column
+        rhs_eq.append(A_LP[ind_row, -1]) # last column element only
+
+    bnd = [(0, float('inf')) for x in range(A_LP.shape[1] - 1)] # default positive plus zero value range for variables
+
+    opt = linprog(c=obj, A_ub=None, b_ub=None,
+                  A_eq=lhs_eq, b_eq=rhs_eq, bounds=bnd,
+                  method="revised simplex")
+
+    return opt
+
+
+def check_if_x_solves_LP(A_LP, x):
+    """
+    Check whether the provided vector solves the LP i.e., satisfies constraints.
+    :param A_LP:
+    :param x:
+    :return:
+    """
+
+    obj = A_LP[-1,:-1] # last row of matrix, up until last column
+    lhs_eq = []
+    rhs_eq = []
+    for ind_row, y in enumerate(A_LP[:-1,:]): # all except last row
+
+        lhs_eq.append(A_LP[ind_row,:-1]) # row up until last column
+        rhs_eq.append(A_LP[ind_row, -1]) # last column element only
+
+    no_solution = False
+    for l,r in zip(lhs_eq, rhs_eq):
+
+        if not np.allclose(l @ x, r):
+            no_solution = True
+            break
+
+    if no_solution:
+        print('The proposed vector does not satisfy the constraints.\nIt is NOT a solution to the provided LP!')
+        return False
+    else:
+        print('\n*********************************SOLUTION FOUND******************************************************\n'
+              'The proposed vector \n'
+              '\t x = {}\n'
+              'satisfies the constraints, and is thus a solution.\n'
+              'The provided solution evaluates the Objective of the LP at: {}\n'
+              '*****************************************************************************************************'.format(x, obj @ x))
+        return True
+
+
+def solve_LP_via_color_refinement(A_LP):
+    """
+    Solve a given LP in matrix form using the formalisms of the paper.
+    Perform iterated color refinement to find out core factors and partitions matrices.
+    Then solve the reduced LP.
+    Finally, map back to the original space.
+
+    :param A_LP: Linear Program as Matrix as in Example 1.1
+    :return: x: solution to the LP that satisfies and optimizes the LP
+    """
+
+    A_LP[-1,-1] = 0
+
+    A_LP_itr_core, core_factors = calculate_iterated_core_factor(A_LP)
+
+    Piqs = []
+    for cf in [A_LP] + core_factors[:-1]:
+
+        ids, labels = assume_bipartite(cf)
+        P, Q = compute_partitions(cf, ids)
+        _, Piq = calculate_partition_matrices(P, Q)
+        Piqs.append(Piq[:-1,:-1]) # discard last row/column as it is only due to the np.inf/0 as right corner element
+
+    opt = optimize_LP(A_LP_itr_core)
+    x_itr_core = opt.x
+
+    x = x_itr_core.copy()
+    for p in reversed(Piqs):
+
+        x = p @ x
+
+    assert check_if_x_solves_LP(A_LP, x)
+
+    return x
 
 """
 Function Section ^
@@ -555,9 +659,12 @@ A = np.array([
 
     [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, np.inf],
 ])
-A[-1,-1] = 0
+
+#A[-1,-1] = 0
 #d = show_graph_and_partitions(A)
-A_itr_core = calculate_iterated_core_factor(A)
+#A_itr_core, core_factors = calculate_iterated_core_factor(A)
+
+x = solve_LP_via_color_refinement(A_LP=A)
 
 """
 More Examples Below v

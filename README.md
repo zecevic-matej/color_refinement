@@ -1,4 +1,4 @@
-# Color Refinement
+## Dimension Reduction via Color Refinement
 
 Based on [Grohe et al. "Dimension Reduction via Color Refinement"](https://arxiv.org/pdf/1307.5697.pdf). 
 
@@ -33,6 +33,25 @@ The equitable partitions also allow for calculating the iterated core factor of 
 Simply run
 
 ```python
-A_itr_core = calculate_iterated_core_factor(A) 
+A_itr_core, _ = calculate_iterated_core_factor(A) 
+```
+
+This procedure can be used for the dimensionality reduction of Linear Programs (LPs) formulated in matrix form. Any LP with only equality constraints can be formulated as a matrix, e.g.:
+![LP_as_matrix.png](imgs/LP_as_matrix.png)
+
+The iterated core factor computed in the previous example corresponds to the two-times reduction of the matrix from LP *L* in the above example. A solution to the corresponding LP of the small matrix is also a solution of the LP i.e., it satisfies the constraints and tries to optimize the objective. Here is a comparison of three vectors* and how they relate to the original LP: 
+![solutions_comparison.png](imgs/solutions_comparison.png)
+(*) `x_through_scipy` is a solution which stems from direct application on the original LP, `x_through_reductions` is a solution which stems from the reconstruction of a solution to the reduced LP, `x_random` is just a random vector that does not solve the LP
+
+The above comparison has been performed running
+
+````python
+check_if_x_solves_LP(A_LP, x)
+````
+
+To acquire `x_through_reductions` i.e., the solution to the original LP through means of color refinement simply run:
+
+```python
+x_through_reductions = solve_LP_via_color_refinement(A_LP)
 ```
 
