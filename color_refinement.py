@@ -1,4 +1,5 @@
 # libraries
+import time
 import pandas as pd
 import numpy as np
 np.set_printoptions(suppress=True, linewidth=200)
@@ -133,11 +134,12 @@ def partition_with_ids(P, Q, ids):
     return P_ids, Q_ids
 
 
-def compute_partitions(A, ids=None, verbose=False):
+def compute_partitions(A, ids=None, verbose=0):
     """
     Color refinement.
 
     :param A: graph matrix
+    :param verbose: 1 detail only high level info, 2 detail anything
     :return: stable partitions P and Q
     """
 
@@ -159,12 +161,12 @@ def compute_partitions(A, ids=None, verbose=False):
         # find all pairs belonging to same class, and join after rule
         new_classes_P = []
         for c_p in P:
-            if verbose:
+            if verbose==2:
                 print("P iter - Class " + str(c_p) + " of " + str(P))
             if count > 0 and len(c_p) == 1:
                 new_classes_P.append(c_p)
             for p in itertools.combinations(c_p, 2):
-                if verbose:
+                if verbose==2:
                     print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_p, 2)]))
                 for c_q in Q:
                     sum1 = sum([A[int(p[0]), int(x)] for x in c_q])
@@ -200,7 +202,7 @@ def compute_partitions(A, ids=None, verbose=False):
                             if p[1] in l:
                                 new_classes_P[ind_l].append(p[1])
                 not_together = False
-                if verbose:
+                if verbose==2:
                     print("State is " + str(new_classes_P))
         new_classes_P = [list(set(s)) for s in new_classes_P]
         new_classes_P = remove_sublists(new_classes_P)
@@ -208,12 +210,12 @@ def compute_partitions(A, ids=None, verbose=False):
         # find all pairs belonging to same class, and join after rule
         new_classes_Q = []
         for c_q in Q:
-            if verbose:
+            if verbose==2:
                 print("Q iter - Class " + str(c_q) + " of " + str(Q))
             if count > 0 and len(c_q) == 1:
                 new_classes_Q.append(c_q)
             for p in itertools.combinations(c_q, 2):
-                if verbose:
+                if verbose==2:
                     print("Pair " + str(p) + " of " + str([x for x in itertools.combinations(c_q, 2)]))
                 for c_p in P:
                     sum1 = sum([A[int(x), int(p[0])] for x in c_p])
@@ -249,19 +251,19 @@ def compute_partitions(A, ids=None, verbose=False):
                             if p[1] in l:
                                 new_classes_Q[ind_l].append(p[1])
                 not_together = False
-                if verbose:
+                if verbose==2:
                     print("State is " + str(new_classes_Q))
             #if count == 2:
             #    import pdb; pdb.set_trace()
         new_classes_Q = [list(set(s)) for s in new_classes_Q]
         new_classes_Q = remove_sublists(new_classes_Q)
 
-        P = new_classes_P
-        Q = new_classes_Q
+        P = sorted([sorted(x) for x in new_classes_P])
+        Q = sorted([sorted(x) for x in new_classes_Q])
 
         count += 1
 
-        if P == P_prev and Q == Q_prev:
+        if check_new_and_old_partition(P, P_prev) and check_new_and_old_partition(Q, Q_prev):
 
             stable = True
 
@@ -269,30 +271,35 @@ def compute_partitions(A, ids=None, verbose=False):
 
                 P_ids, Q_ids = partition_with_ids(P, Q, ids)
 
-                print("***Converged to Stable Configuration after {} Iterations***\n"
-                      "P_{} = P_{} {}\n"
-                      "Q_{} = Q_{} {}\n"
-                      "****************************".format(count, count, count-1, P_ids, count, count-1, Q_ids))
+                if verbose:
+                    print("***Converged to Stable Configuration after {} Iterations***\n"
+                          "P_{} = P_{} {}\n"
+                          "Q_{} = Q_{} {}\n"
+                          "****************************".format(count, count, count-1, P_ids, count, count-1, Q_ids))
 
             else:
-
-                print("***Converged to Stable Configuration after {} Iterations***\n"
-                      "P_{} = P_{} {}\n"
-                      "Q_{} = Q_{} {}\n"
-                      "****************************".format(count, count, count-1, P, count, count-1, Q))
+                if verbose:
+                    print("***Converged to Stable Configuration after {} Iterations***\n"
+                          "P_{} = P_{} {}\n"
+                          "Q_{} = Q_{} {}\n"
+                          "****************************".format(count, count, count-1, P, count, count-1, Q))
 
         else:
-
-            print("***Completed Iteration {}***\n"
-                  "P_{} {}\n"
-                  "Q_{} {}\n"
-                  "****************************".format(count, count, P, count, Q))
+            if verbose:
+                print("***Completed Iteration {}***\n"
+                      "P_{} {}\n"
+                      "Q_{} {}\n"
+                      "****************************".format(count, count, P, count, Q))
 
         P_prev = P
         Q_prev = Q
 
     return P, Q
 
+
+def check_new_and_old_partition(P, P_prev):
+
+    return sorted([sorted(x) for x in P]) == sorted([sorted(x) for x in P_prev])
 
 def char_range(c1, c2):
     """Generates the characters from `c1` to `c2`, inclusive."""
@@ -460,7 +467,7 @@ def calculate_core_factor(A, P, Q):
     return A_core
 
 
-def calculate_iterated_core_factor(A, show_visualizations=False):
+def calculate_iterated_core_factor(A, show_visualizations=False, verbose=0):
     """
     Calculate the iterated core factor of the graph matrix A.
     Visualizations of the intermediate Graphs and permutated versions can be made.
@@ -471,18 +478,19 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
              core_factors: list of all core factors including iterated one
     """
 
-    print('\n++++++++++++++++++++ Initial Matrix of the Graph ++++++++++++++++++++\n\n\t A = {}\n\n'
-          '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'
-          .format('\t' + str(A).replace('\n','\n\t\t')))
+    if verbose:
+        print('\n++++++++++++++++++++ Initial Matrix of the Graph ++++++++++++++++++++\n\n\t A = {}\n\n'
+              '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'
+              .format('\t' + str(A).replace('\n','\n\t\t')))
 
     iter = 1
     fin = False
+    fin_due_loop = False
     core_factors = []
+    loop_prevention = []
     while True:
 
-        ids, labels = assume_bipartite(A)
-
-        P, Q = compute_partitions(A, ids)
+        P, Q = compute_partitions(A, verbose=verbose)
 
         A_core = calculate_core_factor(A, P, Q)
 
@@ -498,13 +506,23 @@ def calculate_iterated_core_factor(A, show_visualizations=False):
 
         if fin:
             break
-        
-        print('\n++++++++++++++++++++ Computed Core Factor {} ++++++++++++++++++++\n\n\t A = {}\n\n'
-              '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'.format(iter, '\t' + str(A_core).replace('\n', '\n\t\t')))
+
+        if verbose:
+            print('\n++++++++++++++++++++ Computed Core Factor {} ++++++++++++++++++++\n\n\t A = {}\n\n'
+                  '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n'.format(iter, '\t' + str(A_core).replace('\n', '\n\t\t')))
 
         iter += 1
 
         core_factors.append(A_core)
+
+        if len(loop_prevention) > 0:
+            for x in loop_prevention:
+                if x.shape == A_core.shape and np.allclose(A_core,x):
+                    print('>> Loop detected during computation of Iterated Core Factor!')
+                    fin_due_loop = True
+        if fin_due_loop:
+            break
+        loop_prevention.append(A_core)
 
     return A_core, core_factors
 
@@ -544,11 +562,12 @@ def create_matrix_comparison(A, B):
     plt.show()
 
 
-def optimize_LP(A_LP):
+def optimize_LP(A_LP, unbounded=False, method='revised simplex'):
     """
     Solve a given LP in matrix form.
 
     :param A_LP: matrix containing LP as in Example 1.1
+    :param method: 'interior-point', 'revised simplex' or 'simplex'
     :return: optimization results
     """
 
@@ -561,11 +580,14 @@ def optimize_LP(A_LP):
         lhs_eq.append(A_LP[ind_row,:-1]) # row up until last column
         rhs_eq.append(A_LP[ind_row, -1]) # last column element only
 
-    bnd = [(0, float('inf')) for x in range(A_LP.shape[1] - 1)] # default positive plus zero value range for variables
+    if unbounded:
+        bnd = [(-np.inf, np.inf) for x in range(A_LP.shape[1] - 1)] # default whole range for all variables
+    else:
+        bnd = [(0, np.inf) for x in range(A_LP.shape[1] - 1)]
 
     opt = linprog(c=obj, A_ub=None, b_ub=None,
                   A_eq=lhs_eq, b_eq=rhs_eq, bounds=bnd,
-                  method="revised simplex")
+                  method=method)
 
     return opt
 
@@ -590,6 +612,7 @@ def check_if_x_solves_LP(A_LP, x):
     for l,r in zip(lhs_eq, rhs_eq):
 
         if not np.allclose(l @ x, r):
+            print('>> Following Mismatch was discovered: l@x {} != r {}'.format(l @ x, r))
             no_solution = True
             break
 
@@ -606,7 +629,7 @@ def check_if_x_solves_LP(A_LP, x):
         return True
 
 
-def solve_LP_via_color_refinement(A_LP):
+def solve_LP_via_color_refinement(A_LP, verbose=0):
     """
     Solve a given LP in matrix form using the formalisms of the paper.
     Perform iterated color refinement to find out core factors and partitions matrices.
@@ -619,13 +642,16 @@ def solve_LP_via_color_refinement(A_LP):
 
     A_LP[-1,-1] = 0
 
-    A_LP_itr_core, core_factors = calculate_iterated_core_factor(A_LP)
+    A_LP_itr_core, core_factors = calculate_iterated_core_factor(A_LP, verbose=verbose)
+
+    if A_LP_itr_core.shape == A_LP.shape:
+        print(">> The Dimension Reduction has not worked! Terminating.")
+        return None
 
     Piqs = []
     for cf in [A_LP] + core_factors[:-1]:
 
-        ids, labels = assume_bipartite(cf)
-        P, Q = compute_partitions(cf, ids)
+        P, Q = compute_partitions(cf)
         _, Piq = calculate_partition_matrices(P, Q)
         Piqs.append(Piq[:-1,:-1]) # discard last row/column as it is only due to the np.inf/0 as right corner element
 
@@ -640,6 +666,59 @@ def solve_LP_via_color_refinement(A_LP):
     assert check_if_x_solves_LP(A_LP, x)
 
     return x
+
+
+def compare_speed_of_direct_and_cr_reduced_solving(A, verbose=0):
+    """
+    Perform both solving approaches on the matrix of the given LP.
+    Compare performance speed.
+    :param A:
+    :return: dict: both acquired solutions, if
+    """
+
+    t0 = time.time()
+    x = solve_LP_via_color_refinement(A_LP=A, verbose=verbose)
+    if x is None:
+        print("No solution found using Dimension Reduction.")
+    t1 = (time.time() - t0)
+    opt = optimize_LP(A)
+    if opt.success:
+        check_if_x_solves_LP(A, opt.x)
+    else:
+        print("No solution found using Standard LP Solver on Original Problem.")
+    t2 = (time.time() - t0) - t1
+    if x is not None and opt.success:
+        print('\nSpeed Comparison --------------------------------------------------------------------\n'
+              'Solving the Original LP directly took: {} seconds\n'
+              'Performing CR, Solving the Reduced LP, and Mapping Back took: {} seconds'.format(t2, t1))
+    else:
+        print('>> No comparison available given that not both methods came up with a solution.')
+
+    return {'cr': x, 'direct': opt.x}
+
+
+def create_big_matrix_from_given(A, N=7):
+    """
+    Construct a big matrix by basically repeating the initial matrix in the
+    Direct Sum fashion (i.e., diagonally concatenated) as defined in the paper.
+
+    :param A:
+    :param N:
+    :return:
+    """
+
+    intermediate = [A]
+    for i in range(1,N+1):
+        A1 = intermediate[-1].copy()
+        A1[-1,-1] = i * 100
+        A2 = intermediate[-1].copy()
+        A2[-1,-1] = i * 101
+        M = np.hstack((np.vstack((A1, np.zeros(A1.shape))), np.vstack((np.zeros(A2.shape), A2))))
+        intermediate.append(M)
+
+    print('Created Matrix of Shape {}'.format(M.shape))
+
+    return M
 
 """
 Function Section ^
@@ -670,20 +749,28 @@ x = solve_LP_via_color_refinement(A_LP=A)
 More Examples Below v
 """
 
+# TODO: optimize below procedure, if possible!, such that it could automatically
+#       produce LPs that can be evaluated, and which could show the speed difference (i.e., contain symmetry)
+# C=30
+# V=30
+# M = np.array(np.random.randint(3, size=(C,V)), dtype=float)
+# rand_ind = np.random.randint(C*V, size=int(C*V*0.1))
+# for i in rand_ind:
+#     i = np.unravel_index(i, M.shape, 'F')
+#     if np.random.choice(2):
+#         M[i] *= -1
+#     if np.allclose(abs(M[i]), 1):
+#         M[i] = M[i] / np.random.randint(1,5)
+# M[-1,-1] = 0
+# rank = np.linalg.matrix_rank
+# if M.shape[0] == M.shape[1] and rank(M[:-1,:-1]) == rank(M[:-1,:]) == len(M) - 1:  # assumes that the matrix is square
+#     print('Matrix is solvable.')
+
 # speed comparison of solving high-dimensional or reducing first
 # for the LP from Example 1.1, solving directly is still clearly faster
 # however scaling to 'really high dimensional' matrices should turn the sides
-#
-# import time
-# t0 = time.time()
-# x = solve_LP_via_color_refinement(A_LP=A)
-# t1 = (time.time() - t0)
-# opt = optimize_LP(A)
-# check_if_x_solves_LP(A, opt.x)
-# t2 = (time.time() - t0) - t1
-# print('\nSpeed Comparison --------------------------------------------------------------------\n'
-#       'Solving the Original LP directly took: {} seconds\n'
-#       'Performing CR, Solving the Reduced LP, and Mapping Back took: {} seconds'.format(t2, t1))
+M = create_big_matrix_from_given(A, N=3)
+d = compare_speed_of_direct_and_cr_reduced_solving(M)
 
 # example matrix
 # A = np.array([
