@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 # mpl.rcParams['text.latex.preamble'] = r'\usepackage{{amsmath,amssymb,amsfonts,amsthm}}\n\setcounter{MaxMatrixCols}{20}'
 from scipy.optimize import linprog
 
-def create_dataframe_from_A_and_ids_and_labels(A, ids, labels):
+
+def create_dataframe_from_A_and_ids_and_labels(A, ids, labels, bipartite=True):
     """
 
     :param A:
@@ -30,11 +31,18 @@ def create_dataframe_from_A_and_ids_and_labels(A, ids, labels):
     for ind_x, row in enumerate(A):
         for ind_y, A_xy in enumerate(row):
             if A_xy != 0:
-                edges['from'].append(vnames[ind_x])
-                edges['to'].append(wnames[ind_y])
+                if bipartite:
+                    edges['from'].append(vnames[ind_x])
+                    edges['to'].append(wnames[ind_y])
+                else:
+                    edges['from'].append(vnames[ind_x])
+                    edges['to'].append(vnames[ind_y])
 
     edges = pd.DataFrame({'from': edges['from'], 'to': edges['to']})
     nodes = pd.DataFrame({'id': vnames + wnames, 'names': vnames + wnames, 'class': vlabels + wlabes, 'bipartite': [0 if x in vlabels else 1 for x in vlabels+wlabes]})
+
+    if not bipartite:
+        nodes = nodes[:int(A.shape[0])]  # if V=W then simply cut off the duplication
 
     G = (nodes, edges)
 
@@ -63,6 +71,7 @@ def draw_graph(G, bipartite=True, debug=False):
 
     # And I need to transform my categorical column in a numerical value: group1->1, group2->2...
     nodes['class'] = pd.Categorical(nodes['class'])
+    pos = None
 
     if bipartite:
         for n in nodes.iterrows():
@@ -352,7 +361,7 @@ def permute_A_according_to_partitions(A, P, Q):
     return Ap
 
 
-def show_graph_and_partitions(A, P=None, Q=None):
+def show_graph_and_partitions(A, P=None, Q=None, bipartite=True):
     """
     Uses all above functions to compute the partitions,
     and visualize them.
@@ -361,10 +370,14 @@ def show_graph_and_partitions(A, P=None, Q=None):
     :return:
     """
 
-    ids, labels = assume_bipartite(A)
+    if bipartite:
+        ids, labels = assume_bipartite(A)
+    else:
+        ids = (list(np.arange(A.shape[0])), list(np.arange(A.shape[0])))
+        labels = (list(np.ones(A.shape[0])), list(np.ones(A.shape[0])))
 
-    G_raw = create_dataframe_from_A_and_ids_and_labels(A, ids, labels)
-    G = draw_graph(G_raw)
+    G_raw = create_dataframe_from_A_and_ids_and_labels(A, ids, labels, bipartite)
+    G = draw_graph(G_raw,bipartite=bipartite)
 
     if not (P and Q):
         P, Q = compute_partitions(A, ids)
@@ -825,3 +838,164 @@ d = compare_speed_of_direct_and_cr_reduced_solving(M)
 #     A = np.random.randint(2, size=(np.random.randint(3,7), np.random.randint(3,7)))
 #
 #     d = show_graph_and_partitions(A)
+
+
+"""
+Prof. Holger Dell's Implementation of Color Refinement for Online Visualization
+(https://github.com/holgerdell/color-refinement)
+
+Originally written in JavaScript, below converted to Python and incorporated into
+the above infrastructure.
+
+Examples follow after the functional section.
+"""
+
+def hd_random_graph(n, m, seed, visualize=True):
+    max_num_edges = int(n * (n-1) / 2) # n choose 2
+    if n < 0 or m < 0 or m > max_num_edges:
+        raise Exception('Please check again.')
+    graph = {
+        'vertices': [],
+        'edges': [],
+    }
+    for i in range(n):
+        graph['vertices'].append({
+            'name': i,
+            'nb': [],
+            'crtree': []
+        })
+    np.random.seed(seed)
+
+    state = np.ones(max_num_edges) * -1
+    for i in range(m):
+        j = np.random.randint(i, max_num_edges)
+        if not (i in state):
+            state[i] = i
+        if not (j in state):
+            state[j] = j
+        tmp = state[j].copy()
+        state[j] = state[i]
+        state[i] = tmp
+
+    def unpair(k):
+        z = np.floor((-1 + np.sqrt(1+8*k)) / 2)
+        return (int(k - z * (1+z) / 2), int(z * (3+z)/2 - k))
+
+    for i in range(m):
+        x,y = unpair(state[i])
+        u = graph['vertices'][x]
+        v = graph['vertices'][n - 1 - y]
+        graph['edges'].append((u,v))
+        u['nb'].append(v)
+        v['nb'].append(u)
+
+    print('Created Random Graph with {} Vertices, {} Edges (Seed {}).'.format(n,m,seed))
+    for x in graph['edges']:
+        print('{} -> {}'.format(x[0]['name'], x[1]['name']))
+
+    graph_alt_repr = (pd.DataFrame({'id': [v['name'] for v in graph['vertices']],
+                                    'class': np.ones(len(graph['vertices']))}),
+                      pd.DataFrame({'from': [x[0]['name'] for x in graph['edges']],
+                                    'to': [x[1]['name'] for x in graph['edges']]}))
+
+    if visualize:
+        draw_graph(graph_alt_repr, False)
+
+    return graph, graph_alt_repr
+
+import functools
+def hd_cr(G):
+    trees = []
+    pNC = 0
+    for i in range(99):
+        trees.append([])
+        for j in range(len(G['vertices'])):
+            #import pdb; pdb.set_trace()
+            #print('Round {} Vertex {}'.format(i,j))
+            v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i])
+            G['vertices'][j] = v
+            #import pdb;pdb.set_trace()
+
+        # trees[i] = hd_sort_ct(trees[i])
+        # for k in range(len(trees[i])):
+        #     trees[i][k]
+
+        NC = len(trees[i])
+        if pNC == NC:
+            trees = trees[:-1]
+            for ind, t in enumerate(trees):
+                print('Round {} delivered {} Classes'.format(ind, len(t)))
+            return trees
+        else:
+            pNC = NC
+    return trees
+
+def hd_refine_at_node(v, depth, treelist):
+    nb = []
+    if depth > 0:
+        for i in range(len(v['nb'])):
+            nb.append(v['nb'][i]['crtree'][depth - 1])
+        nb = sorted(nb, key=functools.cmp_to_key(hd_sort_trees))
+
+    ind = hd_find_tree(treelist, nb)
+    if ind >= 0:
+        T = treelist[ind]
+        T['class'].append(v)
+    else:
+        T = {
+            'rank': None,
+            'size': 1,
+            'children': nb,
+            'class': []
+        }
+        for i in range(len(nb)):
+            T['size'] += nb[i]['size']
+        T['class'].append(v)
+        treelist.append(T)
+    v['crtree'].append(T)
+
+    return v, treelist
+
+def hd_find_tree(treelist, T):
+    for i in range(len(treelist)):
+        if len(treelist[i]['children']) == len(T):
+            couldbe = True
+            for j in range(len(T)):
+                if len(treelist[i]['children']) == len(T) and treelist[i]['children'][j] != T[j]:
+                    couldbe = False
+                    break
+            if couldbe:
+                return i
+
+    return -1
+
+def hd_sort_trees(T1, T2):
+
+    if T1 == T2:
+        return 0
+    elif len(T1['children']) != len(T2['children']):
+        return len(T1['children']) - len(T2['children'])
+    elif T1['size'] != T2['size']:
+        return T1['size'] - T2['size']
+    else:
+        for ind, c in enumerate(T1['children']):
+            res = hd_sort_trees(c, T2['children'][ind])
+            if res != 0:
+                return res
+
+
+"""
+Function Section ^
+Script Section   v
+"""
+
+np.random.seed(1) # fix randomness
+N = 5
+n_vertices = 5
+m_edges = 5
+random_seeds = np.random.randint(0,1000,N)
+for s in random_seeds:
+    print('\n******************* RANDOM SEED {} ***********************************'.format(s))
+    G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
+    c = hd_cr(G)
+    print('************************************************************************\n')
