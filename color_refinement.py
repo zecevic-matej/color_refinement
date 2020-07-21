@@ -2,7 +2,7 @@
 import time
 import pandas as pd
 import numpy as np
-np.set_printoptions(suppress=True, linewidth=200)
+np.set_printoptions(suppress=True, linewidth=250)
 import networkx as nx
 import matplotlib.pyplot as plt
 import itertools
@@ -419,20 +419,44 @@ def calculate_partition_matrices(P, Q):
     :return:
     """
 
-    Vp = sorted(flatten(P))
-    Vq = sorted(flatten(Q))
-
-    Pip = np.zeros((len(Vp), len(P)))
-    Piq = np.zeros((len(Vq), len(Q)))
-
-    for ind_p, p in enumerate(P):
-        for v in Vp:
-            if v in p:
-                Pip[v, ind_p] = 1
-    for ind_q, q in enumerate(Q):
-        for v in Vq:
-            if v in q:
-                Piq[v, ind_q] = 1
+    # Vp = sorted(flatten(P))
+    # Vq = sorted(flatten(Q))
+    #
+    # Pip = np.zeros((len(Vp), len(P)))
+    # Piq = np.zeros((len(Vq), len(Q)))
+    #
+    # for ind_p, p in enumerate(P):
+    #     for v in Vp:
+    #         if v in p:
+    #             Pip[v, ind_p] = 1
+    # for ind_q, q in enumerate(Q):
+    #     for v in Vq:
+    #         if v in q:
+    #             Piq[v, ind_q] = 1
+    total_len = len(flatten(P))
+    Pip = np.zeros((total_len, len(P)))
+    prev_pre = 0
+    for i, c in enumerate(P):
+        if i == 0:
+            pre = 0
+        else:
+            pre = prev_pre
+        after = total_len - pre - len(c)
+        d = np.hstack((np.zeros(pre), np.ones(len(c)), np.zeros(after)))
+        Pip[:,i] = d
+        prev_pre += len(c)
+    total_len = len(flatten(Q))
+    Piq = np.zeros((total_len, len(Q)))
+    prev_pre = 0
+    for i, c in enumerate(Q):
+        if i == 0:
+            pre = 0
+        else:
+            pre = prev_pre
+        after = total_len - pre - len(c)
+        d = np.hstack((np.zeros(pre), np.ones(len(c)), np.zeros(after)))
+        Piq[:, i] = d
+        prev_pre += len(c)
 
     return Pip, Piq
 
@@ -480,7 +504,7 @@ def calculate_core_factor(A, P, Q):
     return A_core
 
 
-def calculate_iterated_core_factor(A, show_visualizations=False, verbose=0):
+def calculate_iterated_core_factor(A, show_visualizations=False, verbose=0, alternate_cr_fun=None):
     """
     Calculate the iterated core factor of the graph matrix A.
     Visualizations of the intermediate Graphs and permutated versions can be made.
@@ -501,9 +525,16 @@ def calculate_iterated_core_factor(A, show_visualizations=False, verbose=0):
     fin_due_loop = False
     core_factors = []
     loop_prevention = []
+    partitions = []
     while True:
 
-        P, Q = compute_partitions(A, verbose=verbose)
+        if alternate_cr_fun:
+            P, Q = alternate_cr_fun(A)
+        else:
+            P, Q = compute_partitions(A, verbose=verbose)
+        partitions.append((P,Q))
+
+        print('Extracted Partitions:\n\tP = {}\n\tQ = {}'.format(P,Q))
 
         A_core = calculate_core_factor(A, P, Q)
 
@@ -537,7 +568,7 @@ def calculate_iterated_core_factor(A, show_visualizations=False, verbose=0):
             break
         loop_prevention.append(A_core)
 
-    return A_core, core_factors
+    return A_core, core_factors, partitions
 
 
 # TODO: make the below function more flexible
@@ -642,7 +673,7 @@ def check_if_x_solves_LP(A_LP, x):
         return True
 
 
-def solve_LP_via_color_refinement(A_LP, verbose=0):
+def solve_LP_via_color_refinement(A_LP, verbose=0, alternate_cr_fun=None):
     """
     Solve a given LP in matrix form using the formalisms of the paper.
     Perform iterated color refinement to find out core factors and partitions matrices.
@@ -653,35 +684,45 @@ def solve_LP_via_color_refinement(A_LP, verbose=0):
     :return: x: solution to the LP that satisfies and optimizes the LP
     """
 
-    A_LP[-1,-1] = 0
-
-    A_LP_itr_core, core_factors = calculate_iterated_core_factor(A_LP, verbose=verbose)
+    A_LP_itr_core, core_factors, partitions = calculate_iterated_core_factor(A_LP, verbose=verbose, alternate_cr_fun=alternate_cr_fun)
 
     if A_LP_itr_core.shape == A_LP.shape:
         print(">> The Dimension Reduction has not worked! Terminating.")
         return None
 
     Piqs = []
-    for cf in [A_LP] + core_factors[:-1]:
+    for ind, cf in enumerate([A_LP] + core_factors[:-1]):
+        #t00 = time.time()
 
-        P, Q = compute_partitions(cf)
+        #P, Q = compute_partitions(cf)
+        P, Q = partitions[ind]
+        #print('Time for Partitions {:.4f} seconds'.format(time.time() - t00))
+        #t01 = time.time()
         _, Piq = calculate_partition_matrices(P, Q)
         Piqs.append(Piq[:-1,:-1]) # discard last row/column as it is only due to the np.inf/0 as right corner element
+        #print('Time for Partition Matrix {:.4f} seconds'.format(time.time() - t01))
 
+    #t0 = time.time()
     opt = optimize_LP(A_LP_itr_core)
     x_itr_core = opt.x
+    #t1 = time.time()
 
     x = x_itr_core.copy()
     for p in reversed(Piqs):
 
         x = p @ x
+    #t2 = time.time()
 
     assert check_if_x_solves_LP(A_LP, x)
+    # t3 = time.time()
+    # print('Time for Optimization {:.4f} seconds\n'
+    #       'Time for Remapping    {:.4f} seconds\n'
+    #       'Time for Asserting    {:.4f} seconds\n'.format(t1-t0, t2-t1, t3-t2))
 
     return x
 
 
-def compare_speed_of_direct_and_cr_reduced_solving(A, verbose=0):
+def compare_speed_of_direct_and_cr_reduced_solving(A, verbose=0, alternate_cr_fun=None):
     """
     Perform both solving approaches on the matrix of the given LP.
     Compare performance speed.
@@ -690,7 +731,7 @@ def compare_speed_of_direct_and_cr_reduced_solving(A, verbose=0):
     """
 
     t0 = time.time()
-    x = solve_LP_via_color_refinement(A_LP=A, verbose=verbose)
+    x = solve_LP_via_color_refinement(A_LP=A, verbose=verbose, alternate_cr_fun=alternate_cr_fun)
     if x is None:
         print("No solution found using Dimension Reduction.")
     t1 = (time.time() - t0)
@@ -721,17 +762,34 @@ def create_big_matrix_from_given(A, N=7):
     """
 
     intermediate = [A]
+    entries = 0
     for i in range(1,N+1):
         A1 = intermediate[-1].copy()
-        A1[-1,-1] = i * 100
-        A2 = intermediate[-1].copy()
-        A2[-1,-1] = i * 101
-        M = np.hstack((np.vstack((A1, np.zeros(A1.shape))), np.vstack((np.zeros(A2.shape), A2))))
+        M = np.hstack((np.vstack((A1, np.zeros(A1.shape))), np.vstack((np.zeros(A1.shape), A1))))
         intermediate.append(M)
+        entries = np.power(2,i)
+    l = list(range(100,(entries+1)*100,100))
+    for i in range(0,entries):
+        M[A.shape[0] - 1 + A.shape[0] * i, A.shape[1] - 1 + A.shape[1] * i] = l[i]
 
-    print('Created Matrix of Shape {}'.format(M.shape))
+    print('Created Matrix of Shape {}\nWith {} times original Matrix A.'.format(M.shape, entries))
 
     return M
+
+
+def inspect_LP_solving_speed(A, rounds=6, method='standard'):
+    times = []
+    for i in range(1,rounds+1):
+        t0 = time.time()
+        C = create_big_matrix_from_given(A, N=i)
+        if method == 'standard':
+            optimize_LP(C)
+        elif method == 'cr':
+            solve_LP_via_color_refinement(C,0,alternate_cr_fun=cr_efficient)
+        t = time.time() - t0
+        times.append(t)
+        print('Round {}: Time for Matrix of Shape {} in Seconds: {:.4f}'.format(i, C.shape, t))
+    return times
 
 """
 Function Section ^
@@ -984,6 +1042,80 @@ def hd_sort_trees(T1, T2):
                 return res
 
 
+def extract_matrix_from_hd_G(G):
+    """
+    Convert a Graph structure to the corresponding connectivity matrix.
+
+    :param G:
+    :return:
+    """
+
+    A = np.zeros((len(G['vertices']), len(G['vertices'])))
+    for e in G['edges']:
+        y = int(e[0]['name'])
+        x = int(e[1]['name'])
+        A[y, x] = 1
+        A[x, y] = 1  # both directions because assuming un-directedness
+
+    return A
+
+
+def create_hd_G_from_matrix(A):
+    """
+    A is assumed to be square given that V=W
+    Simply translate a matrix to the corresponding graph data structure.
+
+    :param A:
+    :return:
+    """
+
+    G = {
+        'vertices': [],
+        'edges': [],
+    }
+
+    for i in range(max(A.shape)):
+        G['vertices'].append({
+            'name': i,
+            'nb': [],
+            'crtree': [],
+        })
+
+    num_edges = int(sum(sum(A)) / 2)
+    for y, row in enumerate(A):
+        for x, val in enumerate(row):
+            if x >= num_edges:
+                continue
+            if val:
+                u = G['vertices'][y]
+                v = G['vertices'][x]
+                G['edges'].append((u,v))
+                u['nb'].append(v)
+                v['nb'].append(u)
+
+    return G
+
+
+def transform_hd_colors_to_partitions(list_classes):
+    """
+    Takes a 'round' from the Holger Dell algorithm i.e., a list of colors/classes
+    and transforms it to a partition compatible with the previous implementation.
+    P = Q is assumed given that V = W.
+
+    :param list_classes:
+    :return:
+    """
+
+    P = []
+    for ind_c, c in enumerate(list_classes):
+        P.append([])
+        for v in c['class']:
+            P[ind_c].append(v['name'])
+    Q = P.copy()
+
+    return P, Q
+
+
 """
 Function Section ^
 Script Section   v
@@ -999,3 +1131,230 @@ for s in random_seeds:
     G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
     c = hd_cr(G)
     print('************************************************************************\n')
+
+
+
+def create_G_from_A(A):
+
+    nodes = np.arange(sum(A.shape))
+    edges = []
+    G = {}
+    for n in nodes:
+        G.update({n: {
+            'nb': [],
+            'weights': []
+        }})
+    for ind_r, row in enumerate(A):
+        for ind_c, val in enumerate(row):
+            if val:
+                u = ind_r
+                v = nodes[A.shape[0] + ind_c]
+                edges.append([u,v])
+                G[u]['nb'].append(v)
+                G[v]['nb'].append(u)
+                G[u]['weights'].append(val)
+                G[v]['weights'].append(val)
+    for v in G:
+        assert len(G[v]['nb']) == len(G[v]['weights'])
+    return G
+
+
+def trunc(values, decimals=0):
+    if values > round(values)-0.01:  # avoiding the 6.99 vs 7 case
+        return round(values)
+    else:
+        return np.trunc(values*10**decimals)/(10**decimals)
+
+
+def cr_efficient(A, debug=False):
+    import queue
+
+    t0 = time.time()
+    if isinstance(A, np.ndarray):
+        G = create_G_from_A(A)
+    elif isinstance(A, dict):
+        G = A
+        raise Exception('Not yet implemented. A transform from G -> A is missing.')
+    else:
+        raise Exception('Unknown Input Type.')
+
+    nodes = list(G.keys())
+
+    # TODO: correct this generally formulated condition to hold on both graphs and matrices
+    # if G[0]['weights'] ... or \
+    #         (isinstance(A, np.ndarray) and np.max(A) != 1 or np.min(A) != 0 and \
+    #         (not np.allclose(A, np.ones(A.shape)) or not np.allclose(A, np.zeros(A.shape)))):
+    if True:
+        weighted = True
+        decimal_precision = 5#10
+        #print('Precision on Sum of Weights for Unification is {} decimals.'.format(decimal_precision))
+    else:
+        weighted = False
+        decimal_precision = None
+
+    C = np.vstack((nodes, np.ones(len(nodes)))).T
+    D = np.vstack((nodes, np.zeros(len(nodes)))).T
+    P = np.vstack((np.ones(len(nodes)), nodes)).T
+    c_min = c_max = 1
+    Q = queue.Queue()
+    Q.put(1)
+    D = np.vstack((nodes, np.zeros(len(nodes)))).T
+    if weighted:
+        E = np.vstack((nodes, np.zeros(len(nodes)))).T  # edge sum per vertex for weighted CR
+        for v in G:
+            E[v,1] = sum(G[v]['weights'])
+    iter = 1
+    t1 = time.time()
+    #print('Initial Time {} seconds'.format(t1 - t0))
+    times_p1 = []
+    times_p2 = []
+    while not Q.empty():
+        # print('Computing Iteration {}...'.format(iter))
+        q = Q.get()
+        t2 = time.time()
+        for v in nodes:
+            s = set(G[v]['nb']).intersection(set([int(P[ind,1]) for ind in np.where(P[:,0] == q)[0]]))
+            D[v,1] = len(s)
+            if weighted:
+                E[v,1] = sum([G[v]['weights'][G[v]['nb'].index(w)] for w in list(s)]) # eine Perle der Codegeschichte ;)
+                E[v,1] = trunc(E[v, 1], decimals=decimal_precision)
+        if weighted:
+            g = sorted(nodes, key=lambda i: (C[i, 1], E[i,1]))
+            g = np.hstack((np.array(g)[:, np.newaxis], np.array([(C[i, 1], E[i, 1]) for i in g])))
+        else:
+            g = sorted(nodes, key = lambda i: (C[i,1], D[i,1]))
+            g = np.hstack((np.array(g)[:, np.newaxis], np.array([(C[i, 1], D[i, 1]) for i in g])))
+        unique_row_indices = np.unique(g[:,1:], return_index=True, axis=0)[1]
+        t3 = time.time()
+        #print('Big Loop part 1 {} seconds'.format(t3 - t2))
+        times_p1.append(t3 - t2)
+        B = []
+        for i, ind in enumerate(unique_row_indices):
+            if i+1 == len(unique_row_indices):
+                start = unique_row_indices[i]
+                end = len(g[:,0])
+            else:
+                start = unique_row_indices[i]
+                end = unique_row_indices[i+1]
+            partition = [int(x) for x in g[:,0][start:end]]
+            B.append(partition)
+        t31 = time.time()
+        #print('P2 1 {:.4f}'.format(t31 - t3))
+        for j in range(c_min, c_max + 1):
+            Pc = [int(P[ind,1]) for ind in np.where(P[:,0] == j)[0]]
+            indices_B_considered = []
+            for ind, b in enumerate(B):
+                for v in Pc:
+                    if v in b:
+                        indices_B_considered.append(ind)
+                        break
+            k1 = indices_B_considered[0]
+            k2 = indices_B_considered[-1]
+            i_star = np.argmax([len(B[i]) for i in range(k1,k2+1)]) + k1
+            new_colors = list(range(k1,k2+1))
+            new_colors.remove(i_star)
+            new_colors = [c_max + i + 1 for i in new_colors]
+            for c in new_colors:
+                Q.put(c)
+        t32 = time.time()
+        #print('P2 2 {:.4f}'.format(t32 - t31))
+        if debug:
+            import pdb; pdb.set_trace()
+        c_min = c_max + 1
+        c_max = c_max + len(B)
+        for b in range(c_min, c_max + 1):
+            partition = np.array(B[b-c_min])
+            new_color_stack = np.vstack((b*np.ones(partition.shape), partition)).T
+            P = np.vstack((P, new_color_stack))
+            for x in B[b-c_min]:
+                C[x,1] = b
+            # for v in B[b - c_min]:
+            #     #t441 = time.time()
+            #     ind_v = list(P[:,1]).index(v)
+            #     #t442 = time.time()
+            #     #P[ind_v,0] = b
+            #     P = np.vstack((P, np.array([b, ind_v]))) # TODO: possible solution for below's TODO
+            #     #t443 = time.time()
+            #     ind_v = list(C[:,0]).index(v)
+            #     #t444 = time.time()
+            #     C[ind_v,1] = b
+            #     #print('1: {}\n2: {}\n3:{}'.format(t442-t441, t443-t442, t444-t443))
+        # TODO: this implementation is not yet 100% correct, as it cannot handle direct sums
+        #       this is due to inconnectivity which is not covered
+        #       it might be due to the Queue not being affected in later iterations given that colors get oudated
+        #       therefore, updating the Queue here
+        #       UPDATE: below is also not correct
+        #       but still think this is the way to go, the colors just need to catch - then discrimination happens
+        # remaining_colors = list(Q.queue)
+        # if len(remaining_colors) > 0:
+        #     remaining_colors = [c_min+x-remaining_colors[0] for x in remaining_colors]
+        #     assert remaining_colors[-1] <= c_max
+        #     Q.queue.clear()
+        #     for c in remaining_colors:
+        #         Q.put(c)
+        t33 = time.time()
+        #print('P2 3 {:.4f}'.format(t33 - t32))
+        times_p2.append(t33 - t3)
+        #print('Big loop part 2 {} seconds'.format(t33 - t3))
+
+        if debug:
+            print('Debug Information:\n'
+                  '\tC(v) =  {}\n'
+                  '\tq={} for D and E\n'
+                  '\tD(v) =  {}\n'
+                  '\tE(v) =  {}\n'
+                  '\tP(c) =  {}\n'
+                  '\tB =  {}\n'
+                  '\tQ =  {}\n'.format(str(C).replace('\n','\n\t\t'),
+                                       q,
+                                       str(D).replace('\n','\n\t\t'),
+                                       str(E).replace('\n','\n\t\t'),
+                                       str(P).replace('\n','\n\t\t'),
+                                       B,
+                                       list(Q.queue)))
+            print('Completed Iteration {}'.format(iter))
+            import pdb; pdb.set_trace()
+        iter += 1
+    # print('Median time in Part1 of Loop {} seconds - {}\n'
+    #       'Median time in Part2 of Loop {} seconds - {}\n'
+    #       '# of iterations in Big Loop {}'.format(np.median(times_p1), [np.round(x,5) for x in times_p1], np.median(times_p2), [np.round(x,5) for x in times_p2], iter-1))
+    t4 = time.time()
+    #print('Time in Big loop {} seconds'.format(t4 - t1))
+    C = np.array(sorted(C, key=lambda i: i[1]))
+    unique_row_indices = np.unique(C[:, 1], return_index=True, axis=0)[1]
+    C_sub = []
+    for i, ind in enumerate(unique_row_indices):
+        if i + 1 == len(unique_row_indices):
+            start = unique_row_indices[i]
+            end = len(C[:, 0])
+        else:
+            start = unique_row_indices[i]
+            end = unique_row_indices[i + 1]
+        partition = [int(x) for x in C[:, 0][start:end]]
+        C_sub.append(partition)
+    # print('List of Color Class Lists (Total of {} Classes found):\n\t{}\n\n'
+    #       'Each Class Length: {}'
+    #       .format(len(C_sub), C_sub, [len(c) for c in C_sub]))
+    t5 = time.time()
+    #print('End phase part 1 {} seconds'.format(t5 - t4))
+    P = []
+    Q = []
+    for ind, c in enumerate(C_sub):
+        if c[0] < A.shape[0]:
+            P.append([])
+        else:
+            Q.append([])
+        for v in c:
+            if v < A.shape[0]:
+                P[-1].append(v)
+            else:
+                Q[-1].append(v)
+    P = sorted(P)
+    Q = sorted(Q)
+    r = list(np.arange(A.shape[0], A.shape[0] + sum([len(x) for x in Q])))
+    for ic, c in enumerate(Q):
+        for ix, x in enumerate(c):
+            Q[ic][ix] = r.index(Q[ic][ix])
+    #print('End phase part 2 {} seconds'.format(time.time() - t5))
+    print('Total Time {} seconds'.format(time.time() - t0))
+    return P, Q

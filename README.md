@@ -55,3 +55,10 @@ To acquire `x_through_reductions` i.e., the solution to the original LP through 
 x_through_reductions = solve_LP_via_color_refinement(A_LP)
 ```
 
+---
+
+### Update: Unpolished More Efficient Algorithm
+
+* Taken from [Grohe et al., *Color Refinement and its Applications*](https://pdfs.semanticscholar.org/0510/efb45779e13c0991354f3f07bbfdfe2caa88.pdf?_ga=2.255072776.1891705782.1594825551-1423594318.1594825551), a more efficient variant of the Color Refinement algorithm has been implemented in `cr_efficient()` which can be passed as an optional argument to any of the previous functions for faster computation. However, although being a lot faster than the previous implementation, the overall speed is still slower than `optimize_LP(original_LP)`.
+  * Therefore an implementation of algorithms presented in [Berkholz et al., *Tight Lower and Upper Bounds for the Complexity of Canonical Colour Refinement*](https://arxiv.org/pdf/1509.08251.pdf) might finally offer the sought speed boost
+* The [algorithm implemented by Holger Dell](https://github.com/holgerdell/color-refinement) is super fast and therefore a proof of concept. A translation from JavaScript to Python has been implemented and is working, however, support for edge weights - which is essential - is not integrated and how this can be done is not yet evident.
