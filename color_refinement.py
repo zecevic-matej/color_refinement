@@ -1358,3 +1358,26 @@ def cr_efficient(A, debug=False):
     #print('End phase part 2 {} seconds'.format(time.time() - t5))
     print('Total Time {} seconds'.format(time.time() - t0))
     return P, Q
+
+# '''
+# Visualization of Four Different Formulas for possible Runtimes
+# of the Color Refinement Algorithm due to different Implementations
+# '''
+# from scipy.special import comb
+# plt.figure(figsize=(12,9))
+# f1 = lambda N, M: N * M
+# f2 = lambda N, M: np.power(N,2) * np.log10(N)
+# f3 = lambda N, M: (N + M) * np.log10(N)
+# f4 = lambda M: M * np.log10(N)
+# n = 30
+# N = np.arange(1,n+1)
+# M = [comb(x,2) for x in N]
+# plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
+# plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
+# plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
+# plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
+# plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
+# plt.ylabel('Calculated Runtime')
+# plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N choose 2'.format(N[0], N[-1]))
+# plt.legend()
+# plt.show()
