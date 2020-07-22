@@ -962,7 +962,7 @@ def hd_random_graph(n, m, seed, visualize=True):
     return graph, graph_alt_repr
 
 import functools
-def hd_cr(G):
+def hd_cr(G, debug=True):
     trees = []
     pNC = 0
     for i in range(99):
@@ -970,9 +970,10 @@ def hd_cr(G):
         for j in range(len(G['vertices'])):
             #import pdb; pdb.set_trace()
             #print('Round {} Vertex {}'.format(i,j))
-            v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i])
+            v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i], debug)
             G['vertices'][j] = v
-            #import pdb;pdb.set_trace()
+            if debug:
+                import pdb;pdb.set_trace()
 
         # trees[i] = hd_sort_ct(trees[i])
         # for k in range(len(trees[i])):
@@ -988,14 +989,14 @@ def hd_cr(G):
             pNC = NC
     return trees
 
-def hd_refine_at_node(v, depth, treelist):
+def hd_refine_at_node(v, depth, treelist, debug=False):
     nb = []
     if depth > 0:
         for i in range(len(v['nb'])):
             nb.append(v['nb'][i]['crtree'][depth - 1])
         nb = sorted(nb, key=functools.cmp_to_key(hd_sort_trees))
 
-    ind = hd_find_tree(treelist, nb)
+    ind = hd_find_tree(treelist, nb, debug)
     if ind >= 0:
         T = treelist[ind]
         T['class'].append(v)
@@ -1004,8 +1005,12 @@ def hd_refine_at_node(v, depth, treelist):
             'rank': None,
             'size': 1,
             'children': nb,
-            'class': []
+            'class': [],
         }
+        # if len(nb) > 0:
+        #     T['weight'] =  sum([x['weights'] for x in nb])
+        # else:
+        #     T['weight'] = 0
         for i in range(len(nb)):
             T['size'] += nb[i]['size']
         T['class'].append(v)
@@ -1014,7 +1019,7 @@ def hd_refine_at_node(v, depth, treelist):
 
     return v, treelist
 
-def hd_find_tree(treelist, T):
+def hd_find_tree(treelist, T, debug=False):
     for i in range(len(treelist)):
         if len(treelist[i]['children']) == len(T):
             couldbe = True
@@ -1023,6 +1028,8 @@ def hd_find_tree(treelist, T):
                     couldbe = False
                     break
             if couldbe:
+                if debug:
+                    import pdb; pdb.set_trace()
                 return i
 
     return -1
@@ -1035,6 +1042,8 @@ def hd_sort_trees(T1, T2):
         return len(T1['children']) - len(T2['children'])
     elif T1['size'] != T2['size']:
         return T1['size'] - T2['size']
+    # elif T1['weight'] != T2['weight']:
+    #     return T1['weight'] - T2['weight']
     else:
         for ind, c in enumerate(T1['children']):
             res = hd_sort_trees(c, T2['children'][ind])
@@ -1060,10 +1069,11 @@ def extract_matrix_from_hd_G(G):
     return A
 
 
-def create_hd_G_from_matrix(A):
+def create_hd_G_from_matrix_bipartite(A):
     """
     A is assumed to be square given that V=W
     Simply translate a matrix to the corresponding graph data structure.
+    Assumes bipartitness i.e., V = W
 
     :param A:
     :return:
@@ -1095,6 +1105,40 @@ def create_hd_G_from_matrix(A):
 
     return G
 
+def create_hd_G_from_matrix(A):
+    """
+    A is assumed to be square given that V=W
+    Simply translate a matrix to the corresponding graph data structure.
+
+    :param A:
+    :return:
+    """
+
+    G = {
+        'vertices': [],
+        'edges': [],
+    }
+
+    for i in range(sum(A.shape)):
+        G['vertices'].append({
+            'name': i,
+            'nb': [],
+            'crtree': [],
+            'weights': []
+        })
+
+    for y, row in enumerate(A):
+        for x, val in enumerate(row):
+            if val:
+                u = G['vertices'][y]
+                v = G['vertices'][x + A.shape[0]]
+                G['edges'].append((u,v))
+                u['nb'].append(v)
+                u['weights'].append(val)
+                v['nb'].append(u)
+                v['weights'].append(val)
+
+    return G
 
 def transform_hd_colors_to_partitions(list_classes):
     """
@@ -1359,25 +1403,45 @@ def cr_efficient(A, debug=False):
     print('Total Time {} seconds'.format(time.time() - t0))
     return P, Q
 
-# '''
-# Visualization of Four Different Formulas for possible Runtimes
-# of the Color Refinement Algorithm due to different Implementations
-# '''
-# from scipy.special import comb
-# plt.figure(figsize=(12,9))
-# f1 = lambda N, M: N * M
-# f2 = lambda N, M: np.power(N,2) * np.log10(N)
-# f3 = lambda N, M: (N + M) * np.log10(N)
-# f4 = lambda M: M * np.log10(N)
-# n = 30
-# N = np.arange(1,n+1)
-# M = [comb(x,2) for x in N]
-# plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
-# plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
-# plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
-# plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
-# plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
-# plt.ylabel('Calculated Runtime')
-# plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N choose 2'.format(N[0], N[-1]))
-# plt.legend()
-# plt.show()
+'''
+Visualization of Four Different Formulas for possible Runtimes
+of the Color Refinement Algorithm due to different Implementations
+'''
+from scipy.special import comb
+plt.figure(figsize=(12,9))
+f1 = lambda N, M: N * M
+f2 = lambda N, M: np.power(N,2) * np.log10(N)
+f3 = lambda N, M: (N + M) * np.log10(N)
+f4 = lambda M: M * np.log10(N)
+n = 30
+N = np.arange(1,n+1)
+M = [x*3 for x in N] #[comb(x,2) for x in N]
+plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
+plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
+plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
+plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
+plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
+plt.ylabel('Calculated Runtime')
+plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N * 3'.format(N[0], N[-1]))
+plt.legend()
+plt.show()
+
+# from pyllist import dllist
+# # n is number of vertices
+# C = []
+# A = []
+# maxcdeg = np.zeros(n+1)
+# maxcdeg[0] = None
+# for c in range(n+1):
+#     if c == 0:
+#         C.append(None)
+#         A.append(None)
+#     C.append(dllist())
+#     A.append([])
+# cdeg = np.zeros(n+1)
+# cdeg[0] = None
+# color = np.ones(n+1)
+# color[0] = None
+# for v in range(1, n+1):
+#     C[1].append(v)
+# # k = l

@@ -65,4 +65,7 @@ x_through_reductions = solve_LP_via_color_refinement(A_LP)
 * A comparison of the different, possible, rountime formulas for different implementations of the Color Refinement algorithm (`N` = # of vertices, `M` = # of edges for a given graph):
   ![runtime_formulas_comparison.png](imgs/runtime_formulas_comparison.png)
   Generally, the biggest "jump" of speed advantage is obtained by going away from the blue curve to one of the other implementations. However, given that this plot shows the **worst** case due to `M = N choose 2`, which is the **maximal** number of possible edges in the graphs generally considered with this framework, there is also a bigger jump between the orange and red/green curves.  
+  * The following plot shows the same as above but for the more optimistic, and arguably average case, of having `N choose 2 > M > N` e.g. `M = N * 3`:
+    ![runtime_formulas_comparison_2.png](imgs/runtime_formulas_comparison_2.png)
+    As can be observed, the gap between the orange and red/green curves is a lot more distinctive now. 
 
