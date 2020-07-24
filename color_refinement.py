@@ -812,31 +812,14 @@ A = np.array([
 ])
 
 A[-1,-1] = 100
-#d = show_graph_and_partitions(A)
-#A_itr_core, core_factors = calculate_iterated_core_factor(A)
+
+#d = show_graph_and_partitions(A) # uncomment this for visualization of the graph and matrix
 
 x = solve_LP_via_color_refinement(A_LP=A)
 
 """
 More Examples Below v
 """
-
-# TODO: optimize below procedure, if possible!, such that it could automatically
-#       produce LPs that can be evaluated, and which could show the speed difference (i.e., contain symmetry)
-# C=30
-# V=30
-# M = np.array(np.random.randint(3, size=(C,V)), dtype=float)
-# rand_ind = np.random.randint(C*V, size=int(C*V*0.1))
-# for i in rand_ind:
-#     i = np.unravel_index(i, M.shape, 'F')
-#     if np.random.choice(2):
-#         M[i] *= -1
-#     if np.allclose(abs(M[i]), 1):
-#         M[i] = M[i] / np.random.randint(1,5)
-# M[-1,-1] = 0
-# rank = np.linalg.matrix_rank
-# if M.shape[0] == M.shape[1] and rank(M[:-1,:-1]) == rank(M[:-1,:]) == len(M) - 1:  # assumes that the matrix is square
-#     print('Matrix is solvable.')
 
 # example matrix
 # A = np.array([
@@ -883,19 +866,14 @@ More Examples Below v
 # ])
 # d = show_graph_and_partitions(A)
 
-# create multiple random binary graphs
-# np.random.seed(0)
-# N = 1
-# for i in range(N):
-#
-#     A = np.random.randint(2, size=(np.random.randint(3,7), np.random.randint(3,7)))
-#
-#     d = show_graph_and_partitions(A)
-
 
 """
 Prof. Holger Dell's Implementation of Color Refinement for Online Visualization
 (https://github.com/holgerdell/color-refinement)
+
+Runtime is O((N+M)*log(N))
+
+ONLY SUPPORTS UNWEIGHTED EDGES SO FAR!
 
 Originally written in JavaScript, below converted to Python and incorporated into
 the above infrastructure.
@@ -1147,21 +1125,12 @@ def transform_hd_colors_to_partitions(list_classes):
 
 
 """
-Function Section ^
-Script Section   v
+More Efficient Implementation of Color Refinement Than the Original
+I.e., instead of running in O(N*M) it runs in O(N*N*log(N))
+
+It is based on the pseudo-code from Grohe et al. 'Color Refinement and its Applications'
+and extended to support weighted edges.
 """
-
-np.random.seed(1) # fix randomness
-N = 5
-n_vertices = 5
-m_edges = 5
-random_seeds = np.random.randint(0,1000,N)
-for s in random_seeds:
-    print('\n******************* RANDOM SEED {} ***********************************'.format(s))
-    G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
-    c = hd_cr(G, debug=False)
-    print('************************************************************************\n')
-
 
 
 def create_G_from_A(A):
@@ -1342,26 +1311,26 @@ def cr_efficient(A, debug=False):
 Visualization of Four Different Formulas for possible Runtimes
 of the Color Refinement Algorithm due to different Implementations
 '''
-f1 = lambda N, M: N * M
-f2 = lambda N, M: np.power(N,2) * np.log10(N)
-f3 = lambda N, M: (N + M) * np.log10(N)
-f4 = lambda M: M * np.log10(N)
-n = 30
-N = np.arange(1,n+1)
-for ind, M in enumerate([[comb(x,2) for x in N], [x*3 for x in N]]):
-    plt.figure(figsize=(12,9))
-    plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
-    plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
-    plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
-    plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
-    plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
-    plt.ylabel('Calculated Runtime')
-    if ind:
-        plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N * 3'.format(N[0], N[-1]))
-    else:
-        plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N choose 2'.format(N[0], N[-1]))
-    plt.legend()
-    plt.show()
+# f1 = lambda N, M: N * M
+# f2 = lambda N, M: np.power(N,2) * np.log10(N)
+# f3 = lambda N, M: (N + M) * np.log10(N)
+# f4 = lambda M: M * np.log10(N)
+# n = 30
+# N = np.arange(1,n+1)
+# for ind, M in enumerate([[comb(x,2) for x in N], [x*3 for x in N]]):
+#     plt.figure(figsize=(12,9))
+#     plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
+#     plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
+#     plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
+#     plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
+#     plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
+#     plt.ylabel('Calculated Runtime')
+#     if ind:
+#         plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N * 3'.format(N[0], N[-1]))
+#     else:
+#         plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N choose 2'.format(N[0], N[-1]))
+#     plt.legend()
+#     plt.show()
 
 '''
 Speed comparison of solving high-dimensional or reducing first
@@ -1369,6 +1338,7 @@ or the LP from Example 1.1, solving directly is still clearly faster
 however scaling to 'really high dimensional' matrices should turn the sides
 Artifically creating bigger Matrix that contains symmetry information via Direct Sum
 '''
-M = create_big_matrix_from_given(A, N=2)
-d1 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=None)
-d2 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=cr_efficient)
+# M = create_big_matrix_from_given(A, N=2)
+# d1 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=None)
+# d2 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=cr_efficient)
+
