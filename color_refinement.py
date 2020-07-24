@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 # mpl.rcParams['text.latex.unicode'] = True
 # mpl.rcParams['text.latex.preamble'] = r'\usepackage{{amsmath,amssymb,amsfonts,amsthm}}\n\setcounter{MaxMatrixCols}{20}'
 from scipy.optimize import linprog
-
+from scipy.special import comb
+import functools
 
 def create_dataframe_from_A_and_ids_and_labels(A, ids, labels, bipartite=True):
     """
@@ -810,7 +811,7 @@ A = np.array([
     [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, np.inf],
 ])
 
-#A[-1,-1] = 0
+A[-1,-1] = 100
 #d = show_graph_and_partitions(A)
 #A_itr_core, core_factors = calculate_iterated_core_factor(A)
 
@@ -836,12 +837,6 @@ More Examples Below v
 # rank = np.linalg.matrix_rank
 # if M.shape[0] == M.shape[1] and rank(M[:-1,:-1]) == rank(M[:-1,:]) == len(M) - 1:  # assumes that the matrix is square
 #     print('Matrix is solvable.')
-
-# speed comparison of solving high-dimensional or reducing first
-# for the LP from Example 1.1, solving directly is still clearly faster
-# however scaling to 'really high dimensional' matrices should turn the sides
-M = create_big_matrix_from_given(A, N=3)
-d = compare_speed_of_direct_and_cr_reduced_solving(M)
 
 # example matrix
 # A = np.array([
@@ -961,23 +956,16 @@ def hd_random_graph(n, m, seed, visualize=True):
 
     return graph, graph_alt_repr
 
-import functools
 def hd_cr(G, debug=True):
     trees = []
     pNC = 0
     for i in range(99):
         trees.append([])
         for j in range(len(G['vertices'])):
-            #import pdb; pdb.set_trace()
-            #print('Round {} Vertex {}'.format(i,j))
             v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i], debug)
             G['vertices'][j] = v
             if debug:
                 import pdb;pdb.set_trace()
-
-        # trees[i] = hd_sort_ct(trees[i])
-        # for k in range(len(trees[i])):
-        #     trees[i][k]
 
         NC = len(trees[i])
         if pNC == NC:
@@ -1042,8 +1030,6 @@ def hd_sort_trees(T1, T2):
         return len(T1['children']) - len(T2['children'])
     elif T1['size'] != T2['size']:
         return T1['size'] - T2['size']
-    # elif T1['weight'] != T2['weight']:
-    #     return T1['weight'] - T2['weight']
     else:
         for ind, c in enumerate(T1['children']):
             res = hd_sort_trees(c, T2['children'][ind])
@@ -1173,7 +1159,7 @@ random_seeds = np.random.randint(0,1000,N)
 for s in random_seeds:
     print('\n******************* RANDOM SEED {} ***********************************'.format(s))
     G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
-    c = hd_cr(G)
+    c = hd_cr(G, debug=False)
     print('************************************************************************\n')
 
 
@@ -1248,14 +1234,9 @@ def cr_efficient(A, debug=False):
         for v in G:
             E[v,1] = sum(G[v]['weights'])
     iter = 1
-    t1 = time.time()
-    #print('Initial Time {} seconds'.format(t1 - t0))
-    times_p1 = []
-    times_p2 = []
     while not Q.empty():
         # print('Computing Iteration {}...'.format(iter))
         q = Q.get()
-        t2 = time.time()
         for v in nodes:
             s = set(G[v]['nb']).intersection(set([int(P[ind,1]) for ind in np.where(P[:,0] == q)[0]]))
             D[v,1] = len(s)
@@ -1269,9 +1250,6 @@ def cr_efficient(A, debug=False):
             g = sorted(nodes, key = lambda i: (C[i,1], D[i,1]))
             g = np.hstack((np.array(g)[:, np.newaxis], np.array([(C[i, 1], D[i, 1]) for i in g])))
         unique_row_indices = np.unique(g[:,1:], return_index=True, axis=0)[1]
-        t3 = time.time()
-        #print('Big Loop part 1 {} seconds'.format(t3 - t2))
-        times_p1.append(t3 - t2)
         B = []
         for i, ind in enumerate(unique_row_indices):
             if i+1 == len(unique_row_indices):
@@ -1282,8 +1260,6 @@ def cr_efficient(A, debug=False):
                 end = unique_row_indices[i+1]
             partition = [int(x) for x in g[:,0][start:end]]
             B.append(partition)
-        t31 = time.time()
-        #print('P2 1 {:.4f}'.format(t31 - t3))
         for j in range(c_min, c_max + 1):
             Pc = [int(P[ind,1]) for ind in np.where(P[:,0] == j)[0]]
             indices_B_considered = []
@@ -1300,8 +1276,6 @@ def cr_efficient(A, debug=False):
             new_colors = [c_max + i + 1 for i in new_colors]
             for c in new_colors:
                 Q.put(c)
-        t32 = time.time()
-        #print('P2 2 {:.4f}'.format(t32 - t31))
         if debug:
             import pdb; pdb.set_trace()
         c_min = c_max + 1
@@ -1312,34 +1286,6 @@ def cr_efficient(A, debug=False):
             P = np.vstack((P, new_color_stack))
             for x in B[b-c_min]:
                 C[x,1] = b
-            # for v in B[b - c_min]:
-            #     #t441 = time.time()
-            #     ind_v = list(P[:,1]).index(v)
-            #     #t442 = time.time()
-            #     #P[ind_v,0] = b
-            #     P = np.vstack((P, np.array([b, ind_v]))) # TODO: possible solution for below's TODO
-            #     #t443 = time.time()
-            #     ind_v = list(C[:,0]).index(v)
-            #     #t444 = time.time()
-            #     C[ind_v,1] = b
-            #     #print('1: {}\n2: {}\n3:{}'.format(t442-t441, t443-t442, t444-t443))
-        # TODO: this implementation is not yet 100% correct, as it cannot handle direct sums
-        #       this is due to inconnectivity which is not covered
-        #       it might be due to the Queue not being affected in later iterations given that colors get oudated
-        #       therefore, updating the Queue here
-        #       UPDATE: below is also not correct
-        #       but still think this is the way to go, the colors just need to catch - then discrimination happens
-        # remaining_colors = list(Q.queue)
-        # if len(remaining_colors) > 0:
-        #     remaining_colors = [c_min+x-remaining_colors[0] for x in remaining_colors]
-        #     assert remaining_colors[-1] <= c_max
-        #     Q.queue.clear()
-        #     for c in remaining_colors:
-        #         Q.put(c)
-        t33 = time.time()
-        #print('P2 3 {:.4f}'.format(t33 - t32))
-        times_p2.append(t33 - t3)
-        #print('Big loop part 2 {} seconds'.format(t33 - t3))
 
         if debug:
             print('Debug Information:\n'
@@ -1359,11 +1305,6 @@ def cr_efficient(A, debug=False):
             print('Completed Iteration {}'.format(iter))
             import pdb; pdb.set_trace()
         iter += 1
-    # print('Median time in Part1 of Loop {} seconds - {}\n'
-    #       'Median time in Part2 of Loop {} seconds - {}\n'
-    #       '# of iterations in Big Loop {}'.format(np.median(times_p1), [np.round(x,5) for x in times_p1], np.median(times_p2), [np.round(x,5) for x in times_p2], iter-1))
-    t4 = time.time()
-    #print('Time in Big loop {} seconds'.format(t4 - t1))
     C = np.array(sorted(C, key=lambda i: i[1]))
     unique_row_indices = np.unique(C[:, 1], return_index=True, axis=0)[1]
     C_sub = []
@@ -1376,11 +1317,6 @@ def cr_efficient(A, debug=False):
             end = unique_row_indices[i + 1]
         partition = [int(x) for x in C[:, 0][start:end]]
         C_sub.append(partition)
-    # print('List of Color Class Lists (Total of {} Classes found):\n\t{}\n\n'
-    #       'Each Class Length: {}'
-    #       .format(len(C_sub), C_sub, [len(c) for c in C_sub]))
-    t5 = time.time()
-    #print('End phase part 1 {} seconds'.format(t5 - t4))
     P = []
     Q = []
     for ind, c in enumerate(C_sub):
@@ -1399,7 +1335,6 @@ def cr_efficient(A, debug=False):
     for ic, c in enumerate(Q):
         for ix, x in enumerate(c):
             Q[ic][ix] = r.index(Q[ic][ix])
-    #print('End phase part 2 {} seconds'.format(time.time() - t5))
     print('Total Time {} seconds'.format(time.time() - t0))
     return P, Q
 
@@ -1407,41 +1342,33 @@ def cr_efficient(A, debug=False):
 Visualization of Four Different Formulas for possible Runtimes
 of the Color Refinement Algorithm due to different Implementations
 '''
-from scipy.special import comb
-plt.figure(figsize=(12,9))
 f1 = lambda N, M: N * M
 f2 = lambda N, M: np.power(N,2) * np.log10(N)
 f3 = lambda N, M: (N + M) * np.log10(N)
 f4 = lambda M: M * np.log10(N)
 n = 30
 N = np.arange(1,n+1)
-M = [x*3 for x in N] #[comb(x,2) for x in N]
-plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
-plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
-plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
-plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
-plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
-plt.ylabel('Calculated Runtime')
-plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N * 3'.format(N[0], N[-1]))
-plt.legend()
-plt.show()
+for ind, M in enumerate([[comb(x,2) for x in N], [x*3 for x in N]]):
+    plt.figure(figsize=(12,9))
+    plt.plot(np.arange(len(N)), f1(N, M), label='N * M')
+    plt.plot(np.arange(len(N)), f2(N, M), label='N * N * log(N)')
+    plt.plot(np.arange(len(N)), f3(N, M), label='(N + M) * log(N)')
+    plt.plot(np.arange(len(N)), f4(M), label='M * log(N)')
+    plt.title('Algorithmic Runtimes for Implemented Color Refinement Routines')
+    plt.ylabel('Calculated Runtime')
+    if ind:
+        plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N * 3'.format(N[0], N[-1]))
+    else:
+        plt.xlabel('Indexes of Tuples (N,M) where N in {}...{} and M = N choose 2'.format(N[0], N[-1]))
+    plt.legend()
+    plt.show()
 
-# from pyllist import dllist
-# # n is number of vertices
-# C = []
-# A = []
-# maxcdeg = np.zeros(n+1)
-# maxcdeg[0] = None
-# for c in range(n+1):
-#     if c == 0:
-#         C.append(None)
-#         A.append(None)
-#     C.append(dllist())
-#     A.append([])
-# cdeg = np.zeros(n+1)
-# cdeg[0] = None
-# color = np.ones(n+1)
-# color[0] = None
-# for v in range(1, n+1):
-#     C[1].append(v)
-# # k = l
+'''
+Speed comparison of solving high-dimensional or reducing first
+or the LP from Example 1.1, solving directly is still clearly faster
+however scaling to 'really high dimensional' matrices should turn the sides
+Artifically creating bigger Matrix that contains symmetry information via Direct Sum
+'''
+M = create_big_matrix_from_given(A, N=2)
+d1 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=None)
+d2 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=cr_efficient)
