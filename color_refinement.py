@@ -814,7 +814,7 @@ A = np.array([
 #d = show_graph_and_partitions(A)
 #A_itr_core, core_factors = calculate_iterated_core_factor(A)
 
-x = solve_LP_via_color_refinement(A_LP=A)
+#x = solve_LP_via_color_refinement(A_LP=A)
 
 """
 More Examples Below v
@@ -840,8 +840,8 @@ More Examples Below v
 # speed comparison of solving high-dimensional or reducing first
 # for the LP from Example 1.1, solving directly is still clearly faster
 # however scaling to 'really high dimensional' matrices should turn the sides
-M = create_big_matrix_from_given(A, N=3)
-d = compare_speed_of_direct_and_cr_reduced_solving(M)
+# M = create_big_matrix_from_given(A, N=3)
+# d = compare_speed_of_direct_and_cr_reduced_solving(M)
 
 # example matrix
 # A = np.array([
@@ -920,7 +920,8 @@ def hd_random_graph(n, m, seed, visualize=True):
         graph['vertices'].append({
             'name': i,
             'nb': [],
-            'crtree': []
+            'crtree': [],
+            'weights': []
         })
     np.random.seed(seed)
 
@@ -945,6 +946,13 @@ def hd_random_graph(n, m, seed, visualize=True):
         v = graph['vertices'][n - 1 - y]
         graph['edges'].append((u,v))
         u['nb'].append(v)
+        # TODO: generalize this possibly
+        if u['name'] == 3 and v['name'] == 1 or u['name'] == 1 and v['name'] == 3:
+            u['weights'].append(2)
+            v['weights'].append(2)
+        else:
+            u['weights'].append(1)
+            v['weights'].append(1)
         v['nb'].append(u)
 
     print('Created Random Graph with {} Vertices, {} Edges (Seed {}).'.format(n,m,seed))
@@ -953,6 +961,7 @@ def hd_random_graph(n, m, seed, visualize=True):
 
     graph_alt_repr = (pd.DataFrame({'id': [v['name'] for v in graph['vertices']],
                                     'class': np.ones(len(graph['vertices']))}),
+                                    # TODO: add this properly # 'bipartite': np.hstack((np.ones(A.shape[0]), np.zeros(A.shape[1])))}),
                       pd.DataFrame({'from': [x[0]['name'] for x in graph['edges']],
                                     'to': [x[1]['name'] for x in graph['edges']]}))
 
@@ -972,8 +981,8 @@ def hd_cr(G, debug=True):
             #print('Round {} Vertex {}'.format(i,j))
             v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i], debug)
             G['vertices'][j] = v
-            if debug:
-                import pdb;pdb.set_trace()
+            # if debug:
+            #     import pdb;pdb.set_trace()
 
         # trees[i] = hd_sort_ct(trees[i])
         # for k in range(len(trees[i])):
@@ -991,12 +1000,32 @@ def hd_cr(G, debug=True):
 
 def hd_refine_at_node(v, depth, treelist, debug=False):
     nb = []
+    nb_weights = []
+    # if v['name'] == 3:
+    #     import pdb; pdb.set_trace()
     if depth > 0:
         for i in range(len(v['nb'])):
-            nb.append(v['nb'][i]['crtree'][depth - 1])
+            # TODO: this has been a nice intuition and works for all small cases tested,
+            #       but not for the big A, even when considering A*12+12 which is principally
+            #       the same all positive integer, but values > 2
+            #       but it doesnt fail because of the values, but rather because of the size seemingly
+            #       and this because of the sorting possibly
+            # for j in range(v['weights'][i]):
+            crtree = v['nb'][i]['crtree'][depth - 1]
+            #crtree['size'] *= v['weights'][i]
+            nb.append(crtree)#(crtree, v['weights'][i]))
+            nb_weights.append(v['weights'][i])
         nb = sorted(nb, key=functools.cmp_to_key(hd_sort_trees))
+        #indices = [i[0] for i in sorted(enumerate(nb), key=functools.cmp_to_key(hd_sort_trees))]
+        #nb = [nb[i] for i in indices]
+        #nb_weights = [nb_weights[i] for i in indices]
 
-    ind = hd_find_tree(treelist, nb, debug)
+    if depth:
+        assert len(nb) == len(v['nb'])
+    print('\n>> Round {}:     Looking at Node {} with #NB = {},       Current #Trees {}\n'.format(depth, v['name'], len(nb), len(treelist)))
+    if debug:
+        import pdb; pdb.set_trace()
+    ind = hd_find_tree(treelist, (nb,nb_weights), debug)
     if ind >= 0:
         T = treelist[ind]
         T['class'].append(v)
@@ -1006,13 +1035,15 @@ def hd_refine_at_node(v, depth, treelist, debug=False):
             'size': 1,
             'children': nb,
             'class': [],
+            'classweight': sum(nb_weights)
+            # 'weightsum': sum(flatten([x['weights'] for x in v['nb']]))
         }
         # if len(nb) > 0:
         #     T['weight'] =  sum([x['weights'] for x in nb])
         # else:
         #     T['weight'] = 0
-        for i in range(len(nb)):
-            T['size'] += nb[i]['size']
+        # for i in range(len(nb)):
+        #     T['size'] += nb[i]['size']
         T['class'].append(v)
         treelist.append(T)
     v['crtree'].append(T)
@@ -1020,11 +1051,13 @@ def hd_refine_at_node(v, depth, treelist, debug=False):
     return v, treelist
 
 def hd_find_tree(treelist, T, debug=False):
+    T, weight = T
     for i in range(len(treelist)):
         if len(treelist[i]['children']) == len(T):
             couldbe = True
             for j in range(len(T)):
-                if len(treelist[i]['children']) == len(T) and treelist[i]['children'][j] != T[j]:
+                #if len(treelist[i]['children']) == len(T) and treelist[i]['children'][j] != T[j]:
+                if len(treelist[i]['children']) == len(T) and (treelist[i]['children'][j]['classweight'] != weight[j] or treelist[i]['children'][j] != T[j]):
                     couldbe = False
                     break
             if couldbe:
@@ -1035,17 +1068,22 @@ def hd_find_tree(treelist, T, debug=False):
     return -1
 
 def hd_sort_trees(T1, T2):
-
+    # ind1,T1 = T1
+    # ind2,T2 = T2
     if T1 == T2:
         return 0
+    # elif T1['weightsum'] != T2['weightsum']:
+    #     return T1['weightsum'] - T2['weightsum']
     elif len(T1['children']) != len(T2['children']):
         return len(T1['children']) - len(T2['children'])
     elif T1['size'] != T2['size']:
         return T1['size'] - T2['size']
-    # elif T1['weight'] != T2['weight']:
-    #     return T1['weight'] - T2['weight']
+    elif T1['classweight'] != T2['classweight']:
+        return T1['classweight'] - T2['classweight']
     else:
         for ind, c in enumerate(T1['children']):
+            print('Once')
+            import pdb; pdb.set_trace()
             res = hd_sort_trees(c, T2['children'][ind])
             if res != 0:
                 return res
@@ -1089,19 +1127,20 @@ def create_hd_G_from_matrix_bipartite(A):
             'name': i,
             'nb': [],
             'crtree': [],
+            'weights': []
         })
 
-    num_edges = int(sum(sum(A)) / 2)
+    A = np.tril(A)
     for y, row in enumerate(A):
         for x, val in enumerate(row):
-            if x >= num_edges:
-                continue
             if val:
                 u = G['vertices'][y]
                 v = G['vertices'][x]
                 G['edges'].append((u,v))
                 u['nb'].append(v)
                 v['nb'].append(u)
+                u['weights'].append(val)
+                v['weights'].append(val)
 
     return G
 
@@ -1140,22 +1179,26 @@ def create_hd_G_from_matrix(A):
 
     return G
 
-def transform_hd_colors_to_partitions(list_classes):
+def transform_hd_colors_to_partitions(list_classes, A_shape):
     """
     Takes a 'round' from the Holger Dell algorithm i.e., a list of colors/classes
     and transforms it to a partition compatible with the previous implementation.
-    P = Q is assumed given that V = W.
 
     :param list_classes:
     :return:
     """
 
+    overall = []
     P = []
+    Q = []
     for ind_c, c in enumerate(list_classes):
-        P.append([])
+        overall.append([])
         for v in c['class']:
-            P[ind_c].append(v['name'])
-    Q = P.copy()
+            overall[ind_c].append(v['name'])
+        if overall[ind_c][0] >= A_shape[0]:
+            Q.append([x - A_shape[0] for x in overall[ind_c]])
+        else:
+            P.append(overall[ind_c])
 
     return P, Q
 
@@ -1165,16 +1208,16 @@ Function Section ^
 Script Section   v
 """
 
-np.random.seed(1) # fix randomness
-N = 5
-n_vertices = 5
-m_edges = 5
-random_seeds = np.random.randint(0,1000,N)
-for s in random_seeds:
-    print('\n******************* RANDOM SEED {} ***********************************'.format(s))
-    G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
-    c = hd_cr(G)
-    print('************************************************************************\n')
+# np.random.seed(1) # fix randomness
+# N = 5
+# n_vertices = 5
+# m_edges = 5
+# random_seeds = np.random.randint(0,1000,N)
+# for s in random_seeds:
+#     print('\n******************* RANDOM SEED {} ***********************************'.format(s))
+#     G,_ = hd_random_graph(n=n_vertices, m=m_edges, seed=s, visualize=True)
+#     c = hd_cr(G)
+#     print('************************************************************************\n')
 
 
 
