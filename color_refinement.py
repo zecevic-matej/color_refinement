@@ -935,35 +935,47 @@ def hd_random_graph(n, m, seed, visualize=True):
 
     return graph, graph_alt_repr
 
-def hd_cr(G, debug=True):
+def hd_cr(G,G_weights, debug=True, verbose=True):
     trees = []
     pNC = 0
     for i in range(99):
         trees.append([])
+        lut = []
         for j in range(len(G['vertices'])):
-            v, treelist = hd_refine_at_node(G['vertices'][j], i, trees[i], debug)
+            v, treelist, lut = hd_refine_at_node(G['vertices'][j], i, trees[i], lut, G_weights, debug, verbose)
             G['vertices'][j] = v
-            if debug:
-                import pdb;pdb.set_trace()
 
         NC = len(trees[i])
         if pNC == NC:
             trees = trees[:-1]
-            for ind, t in enumerate(trees):
-                print('Round {} delivered {} Classes'.format(ind, len(t)))
+            if verbose:
+                for ind, t in enumerate(trees):
+                    print('Round {} delivered {} Classes'.format(ind, len(t)))
             return trees
         else:
             pNC = NC
     return trees
 
-def hd_refine_at_node(v, depth, treelist, debug=False):
+def hd_refine_at_node(v, depth, treelist, lut, G_weights, debug=False, verbose=True):
     nb = []
+    if verbose:
+        print('\n>> Round {}:     '
+              'Looking at Node {} with #NB = {},       '
+              'Current #Trees {}\n'.format(depth, v['name'], len(v['nb']), len(treelist)))
+    if debug:
+        import pdb; pdb.set_trace()
     if depth > 0:
         for i in range(len(v['nb'])):
             nb.append(v['nb'][i]['crtree'][depth - 1])
         nb = sorted(nb, key=functools.cmp_to_key(hd_sort_trees))
 
-    ind = hd_find_tree(treelist, nb, debug)
+    if debug:
+        print('Collected NB. Searching Current Treelist...')
+        import pdb; pdb.set_trace()
+    if depth:
+        ind = hd_find_tree(treelist, nb, v, lut, G_weights, debug)
+    else:
+        ind = hd_find_tree(treelist, nb, v, lut, None, debug)
     if ind >= 0:
         T = treelist[ind]
         T['class'].append(v)
@@ -972,7 +984,7 @@ def hd_refine_at_node(v, depth, treelist, debug=False):
             'rank': None,
             'size': 1,
             'children': nb,
-            'class': [],
+            'class': []
         }
         # if len(nb) > 0:
         #     T['weight'] =  sum([x['weights'] for x in nb])
@@ -982,39 +994,77 @@ def hd_refine_at_node(v, depth, treelist, debug=False):
             T['size'] += nb[i]['size']
         T['class'].append(v)
         treelist.append(T)
+        if v['name'] in G_weights:
+            lut.append(G_weights[v['name']])
     v['crtree'].append(T)
 
-    return v, treelist
+    return v, treelist, lut
 
-def hd_find_tree(treelist, T, debug=False):
+def hd_find_tree(treelist, T, v, lut, G_weights, debug=False):
     for i in range(len(treelist)):
-        if len(treelist[i]['children']) == len(T):
+        if G_weights is None:
+            condition = True
+        else:
+            condition = len(treelist[i]['children']) == len(T)
+        # if not condition:
+        #     import pdb;
+        #     pdb.set_trace()
+        if condition:
+            #if G_weights is None:
             couldbe = True
             for j in range(len(T)):
-                if len(treelist[i]['children']) == len(T) and treelist[i]['children'][j] != T[j]:
+                if treelist[i]['children'][j] != T[j]:
                     couldbe = False
                     break
+            # else:
+            #     #import pdb; pdb.set_trace()
+            #     couldbe = [1 if t in treelist[i]['children'] else 0 for t in T]
             if couldbe:
-                if debug:
-                    import pdb; pdb.set_trace()
                 return i
 
     return -1
 
+def equal_dicts(d1, d2, ignore_keys):
+    return {k: v for k, v in d1.items() if k not in ignore_keys} == {k: v for k, v in d2.items() if k not in ignore_keys}
+
+# TODO: this works, but cannot be used for our use-case given that the structure itself is recursive
+#       i.e., this function applied would never terminate
+def without_keys(d, ignore_keys):
+    d_fin = {}
+    for k in d.keys():
+        if k not in ignore_keys:
+            if isinstance(d[k], list):
+                d_updates = []
+                for x in d[k]:
+                    if not isinstance(x, dict):
+                        d_updates.append(x)
+                    else:
+                        d_updates.append(without_keys(x, ignore_keys))
+                d_fin.update({k: d_updates})
+            elif isinstance(d[k], dict):
+                d_fin.update({k: without_keys(d[k], ignore_keys)})
+            else:
+                d_fin.update({k: d[k]})
+    return d_fin
+
 def hd_sort_trees(T1, T2):
 
-    if T1 == T2:
+    #import pdb; pdb.set_trace()
+    if equal_dicts(T1, T2, ['children_weights']): #T1 == T2:
         return 0
     elif len(T1['children']) != len(T2['children']):
         return len(T1['children']) - len(T2['children'])
     elif T1['size'] != T2['size']:
         return T1['size'] - T2['size']
     else:
-        for ind, c in enumerate(T1['children']):
-            res = hd_sort_trees(c, T2['children'][ind])
-            if res != 0:
-                return res
-
+        return 1
+    # elif T1['children_weights'] != T2['children_weights']:
+    #     return sum(T1['children_weights']) - sum(T2['children_weights'])
+    # else:
+    #     for ind, c in enumerate(T1['children']):
+    #         res = hd_sort_trees(c, T2['children'][ind])
+    #         if res != 0:
+    #             return res
 
 def extract_matrix_from_hd_G(G):
     """
@@ -1034,12 +1084,11 @@ def extract_matrix_from_hd_G(G):
     return A
 
 
-def create_hd_G_from_matrix_bipartite(A):
+def create_hd_G_from_matrix_bipartite(A, with_weights=True, weights_dict=False):
     """
     A is assumed to be square given that V=W
     Simply translate a matrix to the corresponding graph data structure.
     Assumes bipartitness i.e., V = W
-
     :param A:
     :return:
     """
@@ -1050,25 +1099,48 @@ def create_hd_G_from_matrix_bipartite(A):
     }
 
     for i in range(max(A.shape)):
-        G['vertices'].append({
-            'name': i,
-            'nb': [],
-            'crtree': [],
-        })
+        if with_weights:
+            G['vertices'].append({
+                'name': i,
+                'nb': [],
+                'crtree': [],
+                'weights': []
+            })
+        else:
+            G['vertices'].append({
+                'name': i,
+                'nb': [],
+                'crtree': []
+            })
+        if weights_dict:
+            G_weights = {}
 
-    num_edges = int(sum(sum(A)) / 2)
+    A = np.tril(A)
     for y, row in enumerate(A):
         for x, val in enumerate(row):
-            if x >= num_edges:
-                continue
             if val:
                 u = G['vertices'][y]
                 v = G['vertices'][x]
                 G['edges'].append((u,v))
                 u['nb'].append(v)
                 v['nb'].append(u)
+                if with_weights:
+                    u['weights'].append(val)
+                    v['weights'].append(val)
+                if weights_dict:
+                    if u['name'] in G_weights:
+                        G_weights[u['name']].append(val)
+                    else:
+                        G_weights.update({u['name']: [val]})
+                    if v['name'] in G_weights:
+                        G_weights[v['name']].append(val)
+                    else:
+                        G_weights.update({v['name']: [val]})
 
-    return G
+    if weights_dict:
+        return G, G_weights
+    else:
+        return G
 
 def create_hd_G_from_matrix(A):
     """
@@ -1343,7 +1415,7 @@ Artifically creating bigger Matrix that contains symmetry information via Direct
 # d1 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=None)
 # d2 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=cr_efficient)
 
-def test_color_refinement():
+def test_color_refinement_partitions():
     """
     Use some confirmed results of color refinement for the CEP on
     different matrices, with all different implementations to be tested.
@@ -1414,3 +1486,104 @@ def test_color_refinement():
                   .format(ind_m+1, ind_mat+1, len(test_matrices)), end='\r', flush=True)
         print()
 
+
+def test_color_refinement_classes():
+
+    # 5 node graph, like X with one end being connected
+    A1 = np.array([
+        [0., 1., 0., 0., 0.],
+        [1., 0., 1., 1., 1.],
+        [0., 1., 0., 1., 0.],
+        [0., 1., 1., 0., 0.],
+        [0., 1., 0., 0., 0.],
+    ])
+    A1mod = np.array([
+        [0., 2., 0., 0., 0.],
+        [2., 0., 1., 1., 1.],
+        [0., 1., 0., 1., 0.],
+        [0., 1., 1., 0., 0.],
+        [0., 1., 0., 0., 0.],
+    ])
+    # 5 node graph, like Square with Tail
+    A2 = np.array([
+        [0., 1., 0., 0., 0.],
+        [1., 0., 1., 0., 1.],
+        [0., 1., 0., 1., 0.],
+        [0., 0., 1., 0., 1.],
+        [0., 1., 0., 1., 0.],
+    ])
+    A2mod = np.array([
+        [0., 1., 0., 0., 0.],
+        [1., 0., 1., 0., 1.],
+        [0., 1., 0., 2., 0.],
+        [0., 0., 2., 0., 1.],
+        [0., 1., 0., 1., 0.],
+    ])
+    # 5 node graph, like W (or chain simply)
+    A3 = np.array([
+        [0., 1., 0., 0., 0.],
+        [1., 0., 1., 0., 0.],
+        [0., 1., 0., 1., 0.],
+        [0., 0., 1., 0., 1.],
+        [0., 0., 0., 1., 0.],
+    ])
+    A3mod = np.array([
+        [0., 2., 0., 0., 0.],
+        [2., 0., 1., 0., 0.],
+        [0., 1., 0., 1., 0.],
+        [0., 0., 1., 0., 2.],
+        [0., 0., 0., 2., 0.],
+    ])
+    A3mod2 = np.array([
+        [0., 1., 0., 0., 0.],
+        [1., 0., 2., 0., 0.],
+        [0., 2., 0., 1., 0.],
+        [0., 0., 1., 0., 1.],
+        [0., 0., 0., 1., 0.],
+    ])
+    # 3 node graph, chain
+    A4 = np.array([
+        [0., 1., 0.],
+        [1., 0., 1.],
+        [0., 1., 0.]
+    ])
+    A4mod = np.array([
+        [0., 1., 0.],
+        [1., 0., 2.],
+        [0., 2., 0.]
+    ])
+
+    #test_matrices = [A4, A4mod, A3, A3mod, A3mod2, A2, A2mod, A1, A1mod]
+    #solutions = [2, 3, 3, 2, 5, 4, 5, 3, 4]
+
+    test_matrices = [A4,A3,A2,A1] + [A4mod, A3mod, A3mod2, A2mod, A1mod]
+    solutions = [2, 3, 4, 3] + [3, 2, 5, 5, 4]
+    titles = ['3 V chain', '5 V chain', '5 V square-tail', '5 V x'] + \
+             ['3 V chain with one outer 2',
+              '5 V chain with two outer 2',
+              '5 V chain with one inner 2',
+              '5 V square-tail with one 2',
+              '5 V x with one outer 2']
+
+    assert [len(compute_partitions(x)[0]) for x in test_matrices] == solutions # with initial method
+
+    for ind, mat in enumerate(test_matrices):
+
+        G, G_weights = create_hd_G_from_matrix_bipartite(mat, with_weights=False, weights_dict=True)
+
+        trees = hd_cr(G, G_weights, debug=False, verbose=False)
+
+        try:
+            assert solutions[ind] == len(trees[-1])
+        except Exception as e:
+            print('Failed at Matrix {}:\n{}\n\n'
+                  'Which has {} color classes, but the Algorithm gave back {}'.format(
+                titles[ind], mat, solutions[ind], len(trees[-1])
+            ))
+            break
+
+        print('     '
+              'Computed {}/{} Matrix Color Class Cardinalities correctly.'
+              '\t\tDescription: {}                       \n'
+              .format(ind + 1, len(solutions), titles[ind]), end='\r', flush=True)
+    print()
