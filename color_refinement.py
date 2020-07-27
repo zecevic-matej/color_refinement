@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import linprog
 from scipy.special import comb
 import functools
+import pytest
 
 def create_dataframe_from_A_and_ids_and_labels(A, ids, labels, bipartite=True):
     """
@@ -1304,7 +1305,7 @@ def cr_efficient(A, debug=False):
     for ic, c in enumerate(Q):
         for ix, x in enumerate(c):
             Q[ic][ix] = r.index(Q[ic][ix])
-    print('Total Time {} seconds'.format(time.time() - t0))
+    #print('Total Time {} seconds'.format(time.time() - t0))
     return P, Q
 
 '''
@@ -1341,4 +1342,75 @@ Artifically creating bigger Matrix that contains symmetry information via Direct
 # M = create_big_matrix_from_given(A, N=2)
 # d1 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=None)
 # d2 = compare_speed_of_direct_and_cr_reduced_solving(M, alternate_cr_fun=cr_efficient)
+
+def test_color_refinement():
+    """
+    Use some confirmed results of color refinement for the CEP on
+    different matrices, with all different implementations to be tested.
+
+    IMPORTANT:
+    Change the list of methods for this test.
+
+    """
+
+    A1 = np.array([
+            [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
+            [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
+            [1, 3, -1, 0.25, 0.25, 0.25, 0.25, 0, 0, 0.5, 0.5, 0.5, 0.5, 1],
+
+            [0, 1 / 3, 2 / 3, 0, 3 / 2, 0, 3 / 2, 2, 0, 1, 0, -1, 0, 1],
+            [1/3, 1/3, 1/3, 3/2, 0, 3/2, 0, 2, 0, 0, 1, 0, -1, 1],
+            [1/3, 1/3, 1/3, 0, 3/2, 0, 3/2, 0, 2, -1, 0, 1, 0, 1],
+            [2/3, 1/3, 0, 3/2, 0, 3/2, 0, 0, 2, 0, -1, 0, 1, 1],
+
+            [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, 100],
+    ])
+
+    A2 = np.array([
+        [  3.,   1.,   0.,   2.,   1.],
+        [  1.,   3.,   2.,   0.,   1.],
+        [  6.,   6.,   2.,   2., 100]
+    ])
+
+    A3 = np.array([
+        [  4.,   2.,   1.],
+        [ 12.,   4., 100.]
+    ])
+
+    A4 = np.array([
+        [   1,  1,  0],
+        [   0,  1,  1]
+    ])
+
+    A5 = np.array([
+        [   1,  2,  0],
+        [   0,  1,  1]
+    ])
+
+    A6 = np.array([
+        [   2,  1,  0],
+        [   0,  1,  2]
+    ])
+
+    test_matrices = [A1, A2, A3, A4, A5, A6]
+
+    solution_A1 = ([[0, 1, 2], [3, 4, 5, 6], [7]], [[0, 1, 2], [3, 4, 5, 6], [7, 8], [9, 10, 11, 12], [13]])
+    solution_A2 = ([[0, 1], [2]], [[0, 1], [2, 3], [4]])
+    solution_A3 = ([[0], [1]], [[0], [1], [2]])
+    solution_A4 = ([[0, 1]], [[0, 2], [1]])
+    solution_A5 = ([[0], [1]], [[0], [1], [2]])
+    solution_A6 = ([[0, 1]], [[0, 1, 2]])
+    solutions = [solution_A1, solution_A2, solution_A3, solution_A4, solution_A5, solution_A6]
+
+    for ind_m, method in enumerate([compute_partitions, cr_efficient]):
+
+        for ind_mat, M in enumerate(test_matrices):
+
+            pred = method(M)
+
+            assert pred == solutions[ind_mat]
+
+            print('     Method {} computed {}/{} CEPs correctly.                       '
+                  .format(ind_m+1, ind_mat+1, len(test_matrices)), end='\r', flush=True)
+        print()
 
