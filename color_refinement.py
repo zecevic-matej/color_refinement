@@ -1168,7 +1168,7 @@ def create_hd_G_from_matrix_bipartite(A, with_weights=True, weights_dict=False):
     else:
         return G
 
-def create_hd_G_from_matrix(A):
+def create_hd_G_from_matrix(A, with_weights=True, weights_dict=False):
     """
     A is assumed to be square given that V=W
     Simply translate a matrix to the corresponding graph data structure.
@@ -1183,12 +1183,21 @@ def create_hd_G_from_matrix(A):
     }
 
     for i in range(sum(A.shape)):
-        G['vertices'].append({
-            'name': i,
-            'nb': [],
-            'crtree': [],
-            'weights': []
-        })
+        if with_weights:
+            G['vertices'].append({
+                'name': i,
+                'nb': [],
+                'crtree': [],
+                'weights': []
+            })
+        else:
+            G['vertices'].append({
+                'name': i,
+                'nb': [],
+                'crtree': []
+            })
+        if weights_dict:
+            G_weights = {}
 
     for y, row in enumerate(A):
         for x, val in enumerate(row):
@@ -1197,11 +1206,25 @@ def create_hd_G_from_matrix(A):
                 v = G['vertices'][x + A.shape[0]]
                 G['edges'].append((u,v))
                 u['nb'].append(v)
-                u['weights'].append(val)
                 v['nb'].append(u)
-                v['weights'].append(val)
+                if with_weights:
+                    u['weights'].append(val)
+                    v['weights'].append(val)
+                if weights_dict:
+                    if u['name'] in G_weights:
+                        G_weights[u['name']].append(val)
+                    else:
+                        G_weights.update({u['name']: [val]})
+                    if v['name'] in G_weights:
+                        G_weights[v['name']].append(val)
+                    else:
+                        G_weights.update({v['name']: [val]})
 
-    return G
+    if weights_dict:
+        return G, G_weights
+    else:
+        return G
+
 
 def transform_hd_colors_to_partitions(list_classes):
     """
