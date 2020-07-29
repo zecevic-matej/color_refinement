@@ -942,7 +942,15 @@ def hd_cr(G,G_weights, debug=True, verbose=True):
         trees.append([])
         lut = []
         for j in range(len(G['vertices'])):
-            v, treelist, lut = hd_refine_at_node(G['vertices'][j], i, trees[i], lut, G_weights, debug, verbose)
+            if i == 0:
+                prev_trees = None
+            else:
+                prev_trees = []
+                for ind_c, c in enumerate(trees[i-1]):
+                    prev_trees.append([])
+                    for n in c['class']:
+                        prev_trees[ind_c].append(n['name'])
+            v, treelist, lut = hd_refine_at_node(G['vertices'][j], i, trees[i], lut, G_weights, prev_trees, debug, verbose)
             G['vertices'][j] = v
 
         NC = len(trees[i])
@@ -956,7 +964,7 @@ def hd_cr(G,G_weights, debug=True, verbose=True):
             pNC = NC
     return trees
 
-def hd_refine_at_node(v, depth, treelist, lut, G_weights, debug=False, verbose=True):
+def hd_refine_at_node(v, depth, treelist, lut, G_weights, prev_trees, debug=False, verbose=True):
     nb = []
     if verbose:
         print('\n>> Round {}:     '
@@ -973,12 +981,17 @@ def hd_refine_at_node(v, depth, treelist, lut, G_weights, debug=False, verbose=T
         print('Collected NB. Searching Current Treelist...')
         import pdb; pdb.set_trace()
     if depth:
-        ind = hd_find_tree(treelist, nb, v, lut, G_weights, debug)
+        ind = hd_find_tree(treelist, nb, v, lut, G_weights, prev_trees, debug)
     else:
-        ind = hd_find_tree(treelist, nb, v, lut, None, debug)
+        ind = hd_find_tree(treelist, nb, v, lut, None, prev_trees, debug)
     if ind >= 0:
         T = treelist[ind]
+        # cond = list(filter(lambda a: a != -1, np.unique([ind if T['class'] == x[2] else -1 for ind, x in enumerate(lut)])))
         T['class'].append(v)
+        # if cond:
+        #     print('Update T[class] condition triggered.')
+        #     import pdb; pdb.set_trace()
+        #     lut[cond[0]] = (lut[cond[0]][0], lut[cond[0]][1], T['class'])
     else:
         T = {
             'rank': None,
@@ -995,32 +1008,45 @@ def hd_refine_at_node(v, depth, treelist, lut, G_weights, debug=False, verbose=T
         T['class'].append(v)
         treelist.append(T)
         if v['name'] in G_weights:
-            lut.append(G_weights[v['name']])
+            lut.append((G_weights[v['name']], [x['name'] for x in v['nb']], T['class']))
     v['crtree'].append(T)
 
     return v, treelist, lut
 
-def hd_find_tree(treelist, T, v, lut, G_weights, debug=False):
+def hd_find_tree(treelist, T, v, lut, G_weights, prev_trees, debug=False):
     for i in range(len(treelist)):
         if G_weights is None:
-            condition = True
+            condition1 = True
+            condition2 = False
+            condition3 = False
         else:
-            condition = len(treelist[i]['children']) == len(T)
-        # if not condition:
-        #     import pdb;
-        #     pdb.set_trace()
-        if condition:
-            #if G_weights is None:
+            condition1 = (len(treelist[i]['children']) == len(T))
+            condition2 = (sum(lut[i][0]) == sum(G_weights[v['name']]))
+            nbs = lut[i][1]
+            vnbs = [x['name'] for x in v['nb']]
+            condition3 = (sum([1 if x in nbs else 0 for x in vnbs]))
+
+        # import pdb; pdb.set_trace()
+        if (G_weights and condition1 and condition2) or (G_weights is None and condition1):
             couldbe = True
             for j in range(len(T)):
                 if treelist[i]['children'][j] != T[j]:
                     couldbe = False
                     break
-            # else:
-            #     #import pdb; pdb.set_trace()
-            #     couldbe = [1 if t in treelist[i]['children'] else 0 for t in T]
             if couldbe:
                 return i
+        if condition2 and condition3:
+            pass
+            #print('Triggered Condition 3')
+            # import pdb; pdb.set_trace()
+            # condition3 = False
+            # n_in_current_tree = [x['name'] for x in treelist[i]['class']]
+            # for t in prev_trees:
+            #     if sum([1 if n in t else 0 for n in n_in_current_tree]) == len(n_in_current_tree):
+            #         if v['name'] in t:
+            #             condition3 = True
+            # if condition3:
+            #     return i
 
     return -1
 
@@ -1567,6 +1593,7 @@ def test_color_refinement_classes():
 
     assert [len(compute_partitions(x)[0]) for x in test_matrices] == solutions # with initial method
 
+    hit = []
     for ind, mat in enumerate(test_matrices):
 
         G, G_weights = create_hd_G_from_matrix_bipartite(mat, with_weights=False, weights_dict=True)
@@ -1575,15 +1602,21 @@ def test_color_refinement_classes():
 
         try:
             assert solutions[ind] == len(trees[-1])
+
+            print('     '
+                  'Computed Matrix #{} Color Class Cardinalities correctly.'
+                  '\t\tDescription: {}                       \n'
+                  .format(ind + 1, titles[ind]), end='\r', flush=True)
+            hit.append(1)
+
         except Exception as e:
-            print('Failed at Matrix {}:\n{}\n\n'
+
+            print('\nFailed at Matrix {}:\n{}\n\n'
                   'Which has {} color classes, but the Algorithm gave back {}'.format(
                 titles[ind], mat, solutions[ind], len(trees[-1])
             ))
-            break
+            hit.append(0)
+            #break
 
-        print('     '
-              'Computed {}/{} Matrix Color Class Cardinalities correctly.'
-              '\t\tDescription: {}                       \n'
-              .format(ind + 1, len(solutions), titles[ind]), end='\r', flush=True)
     print()
+    print('Correct results for {}/{} matrices.'.format(sum(hit), len(test_matrices)))
