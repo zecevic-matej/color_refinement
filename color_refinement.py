@@ -1286,6 +1286,10 @@ def trunc(values, decimals=0):
     else:
         return np.trunc(values*10**decimals)/(10**decimals)
 
+def check_symmetric(a, rtol=1e-05, atol=1e-08):
+    if a.shape[0] != a.shape[1]:
+        return False
+    return np.allclose(a, a.T, rtol=rtol, atol=atol)
 
 def cr_efficient(A, debug=False):
     import queue
@@ -1411,9 +1415,13 @@ def cr_efficient(A, debug=False):
     P = []
     Q = []
     for ind, c in enumerate(C_sub):
-        if c[0] < A.shape[0]:
-            P.append([])
+        if not check_symmetric(A):
+            if c[0] < A.shape[0]:
+                P.append([])
+            else:
+                Q.append([])
         else:
+            P.append([])
             Q.append([])
         for v in c:
             if v < A.shape[0]:
@@ -1615,6 +1623,9 @@ def test_color_refinement_classes():
               '5 V x with one outer 2']
 
     assert [len(compute_partitions(x)[0]) for x in test_matrices] == solutions # with initial method
+    print('[SUCCESS] Method 1 passes all tests.')
+    assert [len(cr_efficient(x)[0]) for x in test_matrices] == solutions # with initial method
+    print('[SUCCESS] Method 2 passes all tests.')
 
     hit = []
     for ind, mat in enumerate(test_matrices):
@@ -1642,4 +1653,8 @@ def test_color_refinement_classes():
             #break
 
     print()
-    print('Correct results for {}/{} matrices.'.format(sum(hit), len(test_matrices)))
+    if sum(hit) == len(test_matrices):
+        msg = '[SUCCESS]'
+    else:
+        msg = '[FAIL]'
+    print(msg + ' Correct results for {}/{} matrices.'.format(sum(hit), len(test_matrices)))
