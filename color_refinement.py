@@ -1658,3 +1658,59 @@ def test_color_refinement_classes():
     else:
         msg = '[FAIL]'
     print(msg + ' Correct results for {}/{} matrices.'.format(sum(hit), len(test_matrices)))
+
+
+def test_color_refinement_speed():
+
+    method = cr_efficient
+    title = 'O(N*N*log(N))'
+
+    A1 = np.array([
+            [3, -1, 1, 0.25, 0.25, 0.25, 0.25, 0, 0, 3, -2, 0.5, 0.5, 1],
+            [-1, 1, 3, 0.25, 0.25, 0.25, 0.25, 0, 0, -2, 3, 0.5, 0.5, 1],
+            [1, 3, -1, 0.25, 0.25, 0.25, 0.25, 0, 0, 0.5, 0.5, 0.5, 0.5, 1],
+
+            [0, 1 / 3, 2 / 3, 0, 3 / 2, 0, 3 / 2, 2, 0, 1, 0, -1, 0, 1],
+            [1/3, 1/3, 1/3, 3/2, 0, 3/2, 0, 2, 0, 0, 1, 0, -1, 1],
+            [1/3, 1/3, 1/3, 0, 3/2, 0, 3/2, 0, 2, -1, 0, 1, 0, 1],
+            [2/3, 1/3, 0, 3/2, 0, 3/2, 0, 0, 2, 0, -1, 0, 1, 1],
+
+            [2, 2, 2, 3/2, 3/2, 3/2, 3/2, 1, 1, 0.5, 0.5, 0.5, 0.5, 100],
+    ])
+
+    rounds = 5
+    reps = 3
+
+    times = []
+    G_num_vertices = []
+    for n in range(rounds+1):
+        times.append([])
+        for i in range(reps):
+            if n == 0:
+                M = A1
+            else:
+                M = create_big_matrix_from_given(A1, N=n)
+            t0 = time.time()
+            method(M)
+            t = time.time() - t0
+            times[n].append(t)
+        if not check_symmetric(M):
+            G_num_vertices.append(sum(M.shape))
+        else:
+            G_num_vertices.append(A.shape[0])
+    avg_times = [np.mean(x) for x in times]
+    std_times = [np.std(x) for x in times]
+
+    print('[COMPLETE] Ran {} Rounds {} times with Maximum Graph Shape of {}'.format(rounds, reps, M.shape))
+    print('Average Times {}\nSTD\t{}'.format(avg_times, std_times))
+
+    plt.figure(figsize=(12,9))
+    plt.plot(G_num_vertices, avg_times)
+    plt.errorbar(G_num_vertices, avg_times, std_times, linestyle='None', marker='^', label='STD')
+    plt.title('Runtime of chosen Color Refinement Routine ({})'.format(title))
+    plt.ylabel('Average Runtime ({} Repetitions)'.format(reps))
+    plt.xlabel('Graph Size')
+    plt.legend()
+    plt.show()
+
+    return avg_times, std_times
